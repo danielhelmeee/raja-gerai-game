@@ -1,22 +1,22 @@
-import { ALL_CARDS, CARD_BY_ID, GROUPS, HAND_SIZE, shuffle, sortCards } from './cards'
+import { ALL_CARDS, CARD_BY_ID, HAND_SIZE, OPENING_CARD, PLAYERS, shuffle, sortCards } from './cards'
 import { OPPONENT_ORDER, PERSONAS } from './personas'
-import { checkJual, cilokResult } from './rules'
+import { checkJual } from './rules'
 import { TUTORIAL_HANDS } from './tutorial'
-import type { Card, GameAction, GameConfig, GameState, Gerai, NewGameEvent, Player, RoundScore } from './types'
+import type { GameAction, GameState, Gerai, NewGameEvent, Payout, Player } from './types'
 
-const EMPTY_GERAI: Gerai = { cards: [], pile: [], ownerId: null, shape: null }
+const EMPTY_GERAI: Gerai = { cards: [], ownerId: null, shape: null }
 const MAX_EVENTS = 40
 
 export const initialState: GameState = {
   status: 'idle',
   players: [],
   gerai: EMPTY_GERAI,
+  discard: [],
   turn: 0,
-  subPhase: 'normal',
+  opening: true,
   round: 0,
   totalRounds: 3,
   difficulty: 'standard',
-  starter: 0,
   lastWinner: null,
   tutorial: false,
   events: [],
@@ -29,108 +29,74 @@ function pushEvent(state: GameState, event: NewGameEvent): GameState {
   return { ...state, seq, events }
 }
 
-function makePlayers(config: GameConfig): Player[] {
-  const personas = ['you' as const, ...OPPONENT_ORDER.slice(0, config.numPlayers - 1)]
+function makePlayers(): Player[] {
+  const personas = ['you' as const, ...OPPONENT_ORDER]
   return personas.map((persona, id) => ({
     id,
     name: PERSONAS[persona].name,
     isHuman: id === 0,
     persona,
     hand: [],
-    habuan: [],
     duit: 0,
-    stampUsed: false,
-    total: 0,
     roundScores: [],
   }))
 }
 
-/** The holder of the lowest dish (Kopitiam breaks ties) opens round one. */
-function lowestHolder(players: Player[]): number {
-  let best = 0
-  let bestKey = Infinity
-  for (const p of players) {
-    for (const c of p.hand) {
-      const key = c.value * 10 + GROUPS.indexOf(c.group)
-      if (key < bestKey) {
-        bestKey = key
-        best = p.id
-      }
-    }
-  }
-  return best
+/**
+ * Payout for a hawker left holding cards: 1 DUIT each, doubled at 10+ cards,
+ * tripled if they never got to play (all 13 still in hand).
+ */
+export function payoutFor(cardsLeft: number): { multiplier: number; amount: number } {
+  const multiplier = cardsLeft >= HAND_SIZE ? 3 : cardsLeft >= 10 ? 2 : 1
+  return { multiplier, amount: cardsLeft * multiplier }
 }
 
 function deal(state: GameState, round: number): GameState {
-  let players: Player[]
-  if (state.tutorial) {
-    players = state.players.map((p, i) => ({
-      ...p,
-      hand: sortCards(TUTORIAL_HANDS[i].map((id) => CARD_BY_ID.get(id)!)),
-    }))
-  } else {
-    const deck = shuffle(ALL_CARDS)
-    const size = HAND_SIZE[state.players.length]
-    players = state.players.map((p, i) => ({ ...p, hand: sortCards(deck.slice(i * size, (i + 1) * size)) }))
-  }
-  players = players.map((p) => ({ ...p, habuan: [], duit: 0, stampUsed: false }))
-  const starter = state.tutorial ? 0 : state.lastWinner ?? lowestHolder(players)
-  const next: GameState = {
-    ...state,
-    status: 'playing',
-    players,
-    gerai: EMPTY_GERAI,
-    turn: starter,
-    starter,
-    subPhase: 'normal',
-    round,
-  }
+  const hands = state.tutorial
+    ? TUTORIAL_HANDS.map((ids) => ids.map((id) => CARD_BY_ID.get(id)!))
+    : (() => {
+        const deck = shuffle(ALL_CARDS)
+        return state.players.map((_, i) => deck.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE))
+      })()
+  const players = state.players.map((p, i) => ({ ...p, hand: sortCards(hands[i]) }))
+  // Round one opens with the Kopitiam 3; later rounds, the last winner leads anything.
+  const opening = round === 1
+  const starter = opening ? players.findIndex((p) => p.hand.some((c) => c.id === OPENING_CARD)) : (state.lastWinner ?? 0)
+  const next: GameState = { ...state, status: 'playing', players, gerai: EMPTY_GERAI, discard: [], turn: starter, opening, round }
   return pushEvent(next, { type: 'deal', round, starter })
 }
 
-function updatePlayer(players: Player[], id: number, fn: (p: Player) => Player): Player[] {
-  return players.map((p) => (p.id === id ? fn(p) : p))
-}
-
-/** Move to the next hawker; if it comes back to the Gerai owner, they collect it as Habuan. */
+/** Move to the next hawker; if it comes back to the Gerai owner, they've won it and lead again. */
 function advanceTurn(state: GameState): GameState {
   const next = (state.turn + 1) % state.players.length
-  let s: GameState = { ...state, subPhase: 'normal', turn: next }
+  let s: GameState = { ...state, turn: next }
   if (s.gerai.ownerId === next && s.gerai.cards.length) {
-    const won = [...s.gerai.pile, ...s.gerai.cards]
-    s = { ...s, players: updatePlayer(s.players, next, (p) => ({ ...p, habuan: [...p.habuan, ...won] })), gerai: EMPTY_GERAI }
-    s = pushEvent(s, { type: 'collect', actor: next, count: won.length })
+    const count = s.gerai.cards.length
+    s = { ...s, discard: [...s.discard, ...s.gerai.cards], gerai: EMPTY_GERAI }
+    s = pushEvent(s, { type: 'clear', actor: next, count })
   }
   return s
 }
 
-export function scoreRound(p: Player): RoundScore {
-  const habuan = p.habuan.length
-  const hand = p.hand.length
-  return { habuan, duit: p.duit, hand, score: habuan + p.duit - hand }
-}
-
 function endRound(state: GameState, winner: number): GameState {
+  const payouts: Payout[] = []
+  let pot = 0
   const players = state.players.map((p) => {
-    const rs = scoreRound(p)
-    return { ...p, roundScores: [...p.roundScores, rs], total: p.total + rs.score }
+    if (p.id === winner) return p
+    const { multiplier, amount } = payoutFor(p.hand.length)
+    pot += amount
+    payouts.push({ id: p.id, amount })
+    return { ...p, duit: p.duit - amount, roundScores: [...p.roundScores, { cardsLeft: p.hand.length, multiplier, delta: -amount }] }
   })
-  return pushEvent({ ...state, players, status: 'roundEnd', lastWinner: winner }, { type: 'roundEnd', winner })
+  const w = players[winner]
+  players[winner] = { ...w, duit: w.duit + pot, roundScores: [...w.roundScores, { cardsLeft: 0, multiplier: 1, delta: pot }] }
+  return pushEvent({ ...state, players, status: 'roundEnd', lastWinner: winner }, { type: 'roundEnd', winner, payouts })
 }
 
-function isTurnOf(state: GameState, playerId: number) {
-  return state.status === 'playing' && state.turn === playerId
-}
+const isTurnOf = (state: GameState, playerId: number) => state.status === 'playing' && state.turn === playerId
 
-export function canCilok(state: GameState, playerId: number, stamp: boolean): boolean {
-  if (!isTurnOf(state, playerId) || state.subPhase !== 'normal') return false
-  if (state.gerai.ownerId === playerId || !cilokResult(state.gerai, 'high')) return false
-  return !stamp || !state.players[playerId].stampUsed
-}
-
-export function canPass(state: GameState, playerId: number): boolean {
-  return isTurnOf(state, playerId) && (state.subPhase === 'afterCilok' || state.gerai.cards.length > 0)
-}
+/** You can't pass when the Gerai is empty: whoever leads must play. */
+export const canPass = (state: GameState, playerId: number) => isTurnOf(state, playerId) && state.gerai.cards.length > 0
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
@@ -138,7 +104,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const { config } = action
       const base: GameState = {
         ...initialState,
-        players: makePlayers(config),
+        players: makePlayers().slice(0, PLAYERS),
         totalRounds: config.tutorial ? 1 : config.totalRounds,
         difficulty: config.difficulty,
         tutorial: !!config.tutorial,
@@ -150,62 +116,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'JUAL': {
       if (!isTurnOf(state, action.playerId)) return state
       const player = state.players[action.playerId]
-      const cards = action.cardIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean) as Card[]
-      if (cards.length !== action.cardIds.length) return state
-      const check = checkJual(cards, state.gerai)
+      const cards = action.cardIds.map((id) => player.hand.find((c) => c.id === id))
+      if (cards.some((c) => !c) || new Set(action.cardIds).size !== cards.length) return state
+      const check = checkJual(cards as NonNullable<(typeof cards)[number]>[], state.gerai, state.opening)
       if (!check.ok || !check.shape) return state
 
       const ids = new Set(action.cardIds)
       const hand = player.hand.filter((c) => !ids.has(c.id))
-      const gerai: Gerai = {
-        cards: sortCards(cards),
-        pile: [...state.gerai.pile, ...state.gerai.cards],
-        ownerId: action.playerId,
-        shape: check.shape,
-      }
+      const played = sortCards(cards as NonNullable<(typeof cards)[number]>[])
       let s: GameState = {
         ...state,
-        players: updatePlayer(state.players, action.playerId, (p) => ({ ...p, hand })),
-        gerai,
+        players: state.players.map((p) => (p.id === action.playerId ? { ...p, hand } : p)),
+        discard: [...state.discard, ...state.gerai.cards],
+        gerai: { cards: played, ownerId: action.playerId, shape: check.shape },
+        opening: false,
       }
-      s = pushEvent(s, {
-        type: 'jual',
-        actor: action.playerId,
-        cards: gerai.cards,
-        shape: check.shape,
-        beat: state.gerai.ownerId,
-      })
-
-      if (hand.length === 0) {
-        const won = [...gerai.pile, ...gerai.cards]
-        s = {
-          ...s,
-          players: updatePlayer(s.players, action.playerId, (p) => ({ ...p, habuan: [...p.habuan, ...won] })),
-          gerai: EMPTY_GERAI,
-        }
-        s = pushEvent(s, { type: 'collect', actor: action.playerId, count: won.length })
-        return endRound(s, action.playerId)
-      }
+      s = pushEvent(s, { type: 'jual', actor: action.playerId, cards: played, shape: check.shape, beat: state.gerai.ownerId })
+      if (hand.length === 0) return endRound(s, action.playerId)
       return advanceTurn(s)
-    }
-
-    case 'CILOK': {
-      if (!canCilok(state, action.playerId, action.stamp)) return state
-      const result = cilokResult(state.gerai, action.end)!
-      const target = state.gerai.ownerId!
-      let players = updatePlayer(state.players, action.playerId, (p) => ({
-        ...p,
-        hand: sortCards([...p.hand, result.card]),
-        stampUsed: p.stampUsed || action.stamp,
-      }))
-      players = updatePlayer(players, target, (p) => ({ ...p, duit: p.duit + 1 }))
-      let s: GameState = {
-        ...state,
-        players,
-        gerai: { ...state.gerai, cards: result.remaining, shape: result.shape },
-      }
-      s = pushEvent(s, { type: 'cilok', actor: action.playerId, target, card: result.card, end: action.end, stamp: action.stamp })
-      return action.stamp ? { ...s, subPhase: 'afterCilok' } : advanceTurn(s)
     }
 
     case 'PASS': {
@@ -216,7 +144,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'NEXT_ROUND': {
       if (state.status !== 'roundEnd') return state
       if (state.round >= state.totalRounds) {
-        const winner = [...state.players].sort((a, b) => b.total - a.total)[0].id
+        const winner = [...state.players].sort((a, b) => b.duit - a.duit)[0].id
         return pushEvent({ ...state, status: 'gameOver' }, { type: 'gameOver', winner })
       }
       return deal(state, state.round + 1)

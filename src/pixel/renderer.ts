@@ -35,6 +35,8 @@ export interface Frame3 {
   flash: [number, number, number]
   shake: [number, number]
   scanlines: boolean
+  /** A rect (logical px) whose light never drops below `level`: keeps your hand readable. */
+  floor: { x: number; y: number; w: number; h: number; level: number }
 }
 
 const MAX_LIGHTS = 28
@@ -77,6 +79,7 @@ uniform sampler2D uAlbedo; uniform sampler2D uNormal; uniform sampler2D uEmissiv
 uniform vec2 uRes; uniform int uCount;
 uniform vec4 uLightPos[${MAX_LIGHTS}]; uniform vec4 uLightCol[${MAX_LIGHTS}];
 uniform vec3 uAmbient; uniform vec3 uFlash;
+uniform vec4 uFloorRect; uniform float uFloor;
 out vec4 o;
 const float BANDS = 6.0;
 float bayer(vec2 p) {
@@ -99,6 +102,7 @@ void main() {
     float ndl = max(dot(n, normalize(L)), 0.0);
     light += lc.rgb * lc.a * att * (0.3 + 0.7 * ndl);
   }
+  if (p.x >= uFloorRect.x && p.y >= uFloorRect.y && p.x < uFloorRect.z && p.y < uFloorRect.w) light = max(light, vec3(uFloor));
   // Posterise the light into bands with an ordered dither: the 16-bit look.
   light = floor(light * BANDS + bayer(floor(p))) / BANDS;
   vec4 em = texture(uEmissive, uv);
@@ -333,6 +337,8 @@ export class Renderer {
     gl.uniform2f(this.u(this.lightProg, 'uRes'), this.W, this.H)
     gl.uniform3fv(this.u(this.lightProg, 'uAmbient'), f.ambient)
     gl.uniform3fv(this.u(this.lightProg, 'uFlash'), f.flash)
+    gl.uniform4f(this.u(this.lightProg, 'uFloorRect'), f.floor.x, f.floor.y, f.floor.x + f.floor.w, f.floor.y + f.floor.h)
+    gl.uniform1f(this.u(this.lightProg, 'uFloor'), f.floor.level)
     const bind = (unit: number, tex: WebGLTexture, name: string) => {
       gl.activeTexture(gl.TEXTURE0 + unit)
       gl.bindTexture(gl.TEXTURE_2D, tex)

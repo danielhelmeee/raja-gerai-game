@@ -1,10 +1,10 @@
-# CILOK! Pasar Malam Showdown
+# Raja Gerai: Pasar Malam Dai Di
 
-A 16-bit pixel-art climbing card game (Big Two tradition) set at a 1980s Malaysian night market.
+Classic 4-player Dai Di (Big Two) at a 1980s Malaysian night market, in 16-bit pixel art.
 React + Tailwind for menus, a small custom WebGL2 renderer with normal-mapped dynamic lighting for the
 pixel scene, and SNES-style chiptune audio synthesised live with the Web Audio API.
 
-The earlier 3D version is kept in git under the `3d-version` tag.
+Earlier versions are kept in git: `3d-version` (React Three Fiber) and `cilok-pixel-version` (the CILOK! rules).
 
 ```sh
 npm install
@@ -12,17 +12,22 @@ npm run dev      # http://localhost:5173
 npm run build
 ```
 
-## Rules in one breath
+## Rules
 
-40 dish cards (1–10 × Kopitiam/Nasi/Roti/Kuih). **JUAL** a single, pair, triple, four of a kind or run (3+)
-that beats the **GERAI** (same shape, higher number), or **LALU** (pass). When play returns to the Gerai's
-owner unbeaten, they take every dish played on it as **HABUAN**. **CILOK!** steals the dish at either end of a
-rival's Gerai (2+ dishes) and pays them 1 **DUIT**. Once per round the **CILOK & JUAL** stamp lets you steal and
-sell in one turn. The round ends when a hand is empty. Score = Habuan + Duit − cards in hand.
+- 52 cards, 13 each. Ranks 3 (low) … 10, J, Q, K, A, 2 (high). Food groups are the suits:
+  Kopitiam < Nasi < Roti < Kuih (like ◆ ♣ ♥ ♠).
+- Round one opens with the Kopitiam 3 holder, who must include it. Later rounds, the last winner leads.
+- **JUAL** a single, pair, three of a kind, or a 5-card hand that beats the GERAI (same card count, higher).
+  5-card hands, weakest to strongest: **Barisan** (straight, no 2s), **Set Menu** (flush), **Kenduri**
+  (full house), **Borong** (four of a kind + 1), **Hidangan Diraja** (straight flush).
+- **LALU** to pass; you can still play later in the same GERAI. When play returns to the GERAI's owner,
+  it's cleared and they lead anything.
+- First to empty their hand wins the round. Every other hawker pays **DUIT**: 1 per card left, ×2 with
+  10+ cards, ×3 if they never played (13 cards). Most DUIT after the last round is Raja Gerai.
 
 ## Layout
 
-- `src/game/`: pure rules engine (`engine.ts` reducer, `rules.ts`, `ai.ts`, scripted `tutorial.ts`)
+- `src/game/`: pure rules engine (`engine.ts` reducer, `rules.ts` hand classification, `ai.ts`, scripted `tutorial.ts`)
 - `src/pixel/`: sprite art drawn in code (`sprites.ts`), atlas + auto normal maps, WebGL2 deferred-lighting
   renderer, responsive layout, and the `World` frame loop (cards, coins, particles, lights, reactions)
 - `src/audio/AudioEngine.ts`: chiptune kroncong BGM, market ambience and all SFX

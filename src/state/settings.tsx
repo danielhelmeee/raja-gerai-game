@@ -11,7 +11,6 @@ export interface Settings {
   sfxOn: boolean
   /** CRT-style scanlines over the pixels. */
   scanlines: boolean
-  numPlayers: number
   difficulty: Difficulty
   totalRounds: number
   sortMode: 'value' | 'group'
@@ -25,13 +24,12 @@ const DEFAULTS: Settings = {
   musicOn: true,
   sfxOn: true,
   scanlines: true,
-  numPlayers: 4,
   difficulty: 'standard',
   totalRounds: 3,
   sortMode: 'value',
 }
 
-const KEY = 'cilok.settings.v2'
+const KEY = 'rajagerai.settings.v1'
 
 function load(): Settings {
   try {

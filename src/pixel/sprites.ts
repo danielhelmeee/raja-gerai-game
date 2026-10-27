@@ -1,4 +1,4 @@
-import { ALL_CARDS, dishIndex } from '../game/cards'
+import { ALL_CARDS, dishIndex, rankLabel } from '../game/cards'
 import type { Card, Group, PersonaId } from '../game/types'
 import { Atlas } from './atlas'
 import { FONT_CHARS, textWidth } from './font'
@@ -207,18 +207,58 @@ const ICONS: Record<Group, Icon[]> = {
   ],
 }
 
+/** Tiny 16×16 hawker portraits for the face cards. */
+function portrait(p: Paint, ox: number, oy: number, rank: number) {
+  const skin = rank === 11 ? '#B97A4E' : rank === 12 ? '#D9A273' : '#F0C9A0'
+  if (rank === 12) p.ellipse(ox + 8, oy + 8, 7, 7.5, '#F28C28')
+  p.ellipse(ox + 8, oy + 9, rank === 12 ? 4.5 : 5.5, rank === 12 ? 5 : 6, skin)
+  p.rect(ox + 3, oy + 14, 10, 2, rank === 11 ? '#7A3E9D' : rank === 12 ? '#E2557A' : '#F2EFE6')
+  p.px(ox + 6, oy + 9, INK)
+  p.px(ox + 10, oy + 9, INK)
+  p.rect(ox + 7, oy + 12, 3, 1, INK)
+  if (rank === 11) {
+    // Abang: songkok and moustache.
+    p.rect(ox + 3, oy + 1, 10, 4, '#1B1416')
+    p.rect(ox + 6, oy + 11, 5, 1, '#2A1A14')
+  }
+  if (rank === 13) {
+    // Tauke: bald with round glasses and a gold chain.
+    p.ring(ox + 6, oy + 9, 1.6, 1.6, '#2A2020')
+    p.ring(ox + 10, oy + 9, 1.6, 1.6, '#2A2020')
+    p.rect(ox + 3, oy + 6, 2, 3, '#D8D4CC')
+    p.rect(ox + 12, oy + 6, 2, 3, '#D8D4CC')
+    p.rect(ox + 5, oy + 14, 6, 1, C.gold)
+  }
+}
+
+function crown(p: Paint, ox: number, oy: number) {
+  p.rect(ox, oy + 2, 9, 3, C.gold)
+  p.px(ox, oy, C.gold)
+  p.px(ox, oy + 1, C.gold)
+  p.px(ox + 4, oy, C.gold)
+  p.px(ox + 4, oy + 1, C.gold)
+  p.px(ox + 8, oy, C.gold)
+  p.px(ox + 8, oy + 1, C.gold)
+  p.px(ox + 4, oy + 3, C.red)
+}
+
 function cardFront(card: Card): Paint {
   const p = new Paint(CARD_W, CARD_H)
   const ink = GROUP_INK[card.group]
-  p.rrect(0, 0, CARD_W, CARD_H, ink)
+  const special = card.rank >= 14
+  p.rrect(0, 0, CARD_W, CARD_H, special ? C.goldDark : ink)
   p.rrect(1, 1, CARD_W - 2, CARD_H - 2, C.paper)
   p.rect(2, CARD_H - 3, CARD_W - 4, 1, C.paperShade)
   // Corner index, big enough to read when cards overlap.
-  const label = String(card.value)
-  p.text(label, card.value === 10 ? 2 : 3, 3, ink, 2)
+  const label = rankLabel(card.rank)
+  p.text(label, label.length > 1 ? 2 : 3, 3, ink, 2)
   p.ellipse(16, 27, 10, 8.5, GROUP_PASTEL[card.group])
-  ICONS[card.group][dishIndex(card.value)](p, 8, 19)
+  if (special) p.ring(16, 27, 10, 8.5, C.gold)
+  if (card.rank >= 11 && card.rank <= 13) portrait(p, 8, 19, card.rank)
+  else ICONS[card.group][card.rank === 14 ? 0 : card.rank === 15 ? 1 : dishIndex(card.rank)](p, 8, 19)
+  if (card.rank === 15) crown(p, 22, 14)
   p.text(label, CARD_W - 3 - textWidth(label), CARD_H - 10, ink)
+  // Food-group pip, the suit marker.
   p.rect(3, CARD_H - 8, 3, 3, ink)
   return p
 }
@@ -482,26 +522,6 @@ function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
 
 // ───────────────────────── props & scenery ─────────────────────────
 
-function plateSprite(): Paint {
-  const p = new Paint(30, 18)
-  p.ellipse(15, 10, 14, 7, '#D9D3C4')
-  p.ellipse(15, 9, 14, 7, '#F7F4EC')
-  p.ring(15, 9, 14, 7, C.blueRim)
-  p.ring(15, 9, 10, 4.5, '#DCD6C8')
-  for (const [x, y, c] of [
-    [5, 6, C.red],
-    [25, 6, C.pink],
-    [8, 13, C.pink],
-    [22, 13, C.red],
-    [15, 3, C.red],
-  ] as [number, number, string][]) {
-    p.px(x, y, c)
-    p.px(x + 1, y, C.green)
-  }
-  p.outline(INK)
-  return p
-}
-
 function coinFrame(k: number): Paint {
   const p = new Paint(8, 8)
   const rx = [3.5, 2.4, 0.8, 2.4][k]
@@ -514,33 +534,34 @@ function coinFrame(k: number): Paint {
   return p
 }
 
-function coinSlice(): Paint {
-  const p = new Paint(9, 4)
-  p.ellipse(4.5, 2, 4.2, 1.6, C.goldDark)
-  p.ellipse(4.5, 1.5, 4.2, 1.4, C.gold)
-  p.px(3, 1, C.goldLight)
+/** Alas meja: an indigo batik cloth built from tiles plus a maroon-and-gold border. */
+function clothTile(): Paint {
+  const p = new Paint(16, 16)
+  p.rect(0, 0, 16, 16, '#2A3466')
+  for (let i = 0; i < 16; i++) {
+    if (i % 4 === 0) continue
+    p.px(i, i, '#33407A')
+    p.px(15 - i, i, '#33407A')
+  }
+  p.px(8, 8, '#8A6A3A')
+  p.px(7, 8, '#6A4E50')
+  p.px(9, 8, '#6A4E50')
+  p.px(8, 7, '#6A4E50')
+  p.px(8, 9, '#6A4E50')
+  p.px(0, 0, '#5A4A5A')
   return p
 }
 
-function stamp(used: boolean): Paint {
-  const p = new Paint(16, 20)
-  if (!used) {
-    p.circle(8, 4, 3, C.red)
-    p.px(7, 3, '#FF8A7A')
-    p.rect(6, 6, 4, 6, '#9A6236')
-    p.rect(2, 12, 12, 5, '#B07042')
-    p.rect(2, 12, 12, 1, '#C88A58')
-    p.rect(2, 17, 12, 2, C.red)
-  } else {
-    p.rect(2, 2, 12, 7, C.red)
-    p.rect(4, 4, 2, 3, C.cream)
-    p.rect(7, 4, 2, 3, C.cream)
-    p.rect(10, 4, 2, 3, C.cream)
-    p.rect(2, 9, 12, 4, '#B07042')
-    p.rect(6, 13, 4, 3, '#9A6236')
-    p.circle(8, 17, 2.4, C.red)
+function clothEdge(vertical: boolean): Paint {
+  const p = vertical ? new Paint(5, 16) : new Paint(16, 5)
+  const L = vertical ? 16 : 5
+  p.rect(0, 0, p.w, p.h, C.maroon)
+  for (let i = 1; i < 16; i += 4) {
+    if (vertical) p.px(2, i, C.yellow)
+    else p.px(i, 2, C.yellow)
   }
-  p.outline(INK)
+  if (vertical) p.rect(4, 0, 1, L, '#5A1828')
+  else p.rect(0, 4, 16, 1, '#5A1828')
   return p
 }
 
@@ -724,11 +745,10 @@ export function buildAtlas(): Atlas {
   for (const id of ['ahseng', 'lina', 'mat'] as const) {
     for (const pose of POSES) a.add(`hawker:${id}:${pose}`, hawker(id, pose), { bevel: 4, detail: 0.4 })
   }
-  a.add('plate', plateSprite(), { bevel: 3 })
   for (let k = 0; k < 4; k++) a.add(`coin:${k}`, coinFrame(k), { bevel: 2 })
-  a.add('coin:slice', coinSlice(), { bevel: 1 })
-  a.add('stamp', stamp(false), { bevel: 2 })
-  a.add('stamp:used', stamp(true), { bevel: 2 })
+  a.add('cloth:tile', clothTile(), { bevel: 0, detail: 0.6 })
+  a.add('cloth:h', clothEdge(false), { bevel: 1 })
+  a.add('cloth:v', clothEdge(true), { bevel: 1 })
   a.add('cup', kopiCup(), { bevel: 2 })
   a.add('grill', grill(), { bevel: 1 })
   for (let v = 0; v < 3; v++) a.add(`wood:${v}`, woodTile(v), { bevel: 0, detail: 0.9 })
@@ -738,8 +758,7 @@ export function buildAtlas(): Atlas {
   a.add('lamp', lampShade(), { bevel: 1 })
   for (const r of [4, 8, 14, 24, 40]) a.add(`halo:${r}`, halo(r), { bevel: 0 })
   a.add('ring:avatar', ringSprite(24, 5, 2), { bevel: 0 })
-  a.add('ring:plate', ringSprite(18, 10, 2), { bevel: 0 })
-  a.add('ring:small', ringSprite(11, 7, 2), { bevel: 0 })
+  a.add('ring:pile', ringSprite(14, 12, 2), { bevel: 0 })
   a.add('sparkle', sparkle(), { bevel: 0 })
   a.add('arrow', arrow(), { bevel: 0 })
   for (const k of ['card', 'coin', 'trophy'] as const) a.add(`icon:${k}`, icon(k), { bevel: 0 })

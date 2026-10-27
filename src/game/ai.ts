@@ -1,119 +1,91 @@
-import { canCilok, canPass } from './engine'
-import { beats, cilokResult, legalPlays, type Play } from './rules'
-import type { Card, End, GameAction, GameState } from './types'
-
-/** Rough number of plays needed to empty a hand: greedy runs of 3+, then one play per number. */
-export function playsToEmpty(hand: Card[]): number {
-  const counts = new Array(12).fill(0)
-  for (const c of hand) counts[c.value]++
-  let plays = 0
-  for (;;) {
-    let bestStart = -1
-    let bestLen = 0
-    for (let s = 1; s <= 10; s++) {
-      let len = 0
-      // Don't break up pairs or better to make a run.
-      while (s + len <= 10 && counts[s + len] === 1) len++
-      if (len > bestLen) {
-        bestLen = len
-        bestStart = s
-      }
-    }
-    if (bestLen < 3) break
-    for (let v = bestStart; v < bestStart + bestLen; v++) counts[v]--
-    plays++
-  }
-  return plays + counts.filter((n) => n > 0).length
-}
+import { canPass } from './engine'
+import { enumeratePlays, legalPlays, type Play } from './rules'
+import type { Card, GameAction, GameState } from './types'
 
 const without = (hand: Card[], cards: Card[]) => {
   const ids = new Set(cards.map((c) => c.id))
   return hand.filter((c) => !ids.has(c.id))
 }
 
-type Option = { action: GameAction; value: number }
-
-function handValue(hand: Card[]): number {
-  return -playsToEmpty(hand) * 3 - hand.length
+/** Plays needed if every remaining rank goes out as one single/pair/triple (quads count as two). */
+function simplePlays(hand: Card[]): number {
+  const counts = new Map<number, number>()
+  for (const c of hand) counts.set(c.rank, (counts.get(c.rank) ?? 0) + 1)
+  let n = 0
+  for (const k of counts.values()) n += k === 4 ? 2 : 1
+  return n
 }
 
-const ENDS: End[] = ['low', 'high']
+/** Fewest plays to empty the hand, trying up to two five-card hands first. */
+export function planPlays(hand: Card[]): number {
+  let best = simplePlays(hand)
+  const fives = enumeratePlays(hand).filter((p) => p.shape.kind === 'five').slice(0, 24)
+  for (const f of fives) {
+    const rest = without(hand, f.cards)
+    best = Math.min(best, 1 + simplePlays(rest))
+    for (const g of enumeratePlays(rest)
+      .filter((p) => p.shape.kind === 'five')
+      .slice(0, 12)) {
+      best = Math.min(best, 2 + simplePlays(without(rest, g.cards)))
+    }
+  }
+  return best
+}
+
+/** How "strong" a play is, 0..1: spending strong plays early wastes control later. */
+function strength(p: Play): number {
+  if (p.shape.kind === 'five') return 0.55 + 0.1 * ['barisan', 'setmenu', 'kenduri', 'borong', 'diraja'].indexOf(p.shape.five!)
+  const rank = p.shape.kind === 'triple' ? p.shape.key : Math.floor(p.shape.key / 4)
+  return (rank - 3) / 12
+}
+
+type Option = { action: GameAction; value: number }
 
 export function decide(state: GameState, playerId: number): GameAction {
   const me = state.players[playerId]
-  const { gerai, difficulty } = state
+  const { gerai, difficulty, opening } = state
   const leading = gerai.cards.length === 0
+  const legal = legalPlays(me.hand, gerai, opening)
   const others = state.players.filter((p) => p.id !== playerId)
   const danger = Math.min(...others.map((p) => p.hand.length))
-  const ownerHand = gerai.ownerId !== null ? state.players[gerai.ownerId].hand.length : 99
-  // A strong leftover Gerai is a nuisance for whoever plays next, unless that's the owner collecting it.
-  const nextId = (playerId + 1) % state.players.length
-  const nextIsOwner = nextId === gerai.ownerId
+  const next = state.players[(playerId + 1) % state.players.length]
 
-  const playValue = (hand: Card[], play: Play): number => {
-    const rest = without(hand, play.cards)
-    if (rest.length === 0) return 1000
-    let v = handValue(rest)
-    if (leading) v -= play.shape.rank * 0.25
-    else {
-      v -= (play.shape.rank / 10) * (rest.length > 4 ? 2.2 : 0.6)
-      v += (gerai.pile.length + gerai.cards.length) * 0.25
-    }
-    if (play.shape.kind === 'set' && play.shape.count === 4 && rest.length > 3 && danger > 2) v -= 3
-    return v
-  }
+  if (!legal.length) return { type: 'PASS', playerId }
 
   if (difficulty === 'easy') {
-    const plays = legalPlays(me.hand, gerai)
-    if (state.subPhase === 'afterCilok') {
-      return plays.length ? { type: 'JUAL', playerId, cardIds: plays[0].cards.map((c) => c.id) } : { type: 'PASS', playerId }
-    }
-    if (!leading && (plays.length === 0 || Math.random() < 0.3)) {
-      if (canCilok(state, playerId, false) && Math.random() < 0.12) {
-        return { type: 'CILOK', playerId, stamp: false, end: Math.random() < 0.5 ? 'low' : 'high' }
-      }
-      return { type: 'PASS', playerId }
-    }
-    const play = plays[Math.floor(Math.random() * plays.length)]
-    return { type: 'JUAL', playerId, cardIds: play.cards.map((c) => c.id) }
+    if (!leading && Math.random() < 0.3 && canPass(state, playerId)) return { type: 'PASS', playerId }
+    const pick = leading ? legal.sort((a, b) => b.cards.length - a.cards.length)[0] : legal[Math.floor(Math.random() * legal.length)]
+    return { type: 'JUAL', playerId, cardIds: pick.cards.map((c) => c.id) }
   }
 
-  const options: Option[] = []
-  for (const play of legalPlays(me.hand, gerai)) {
-    options.push({ action: { type: 'JUAL', playerId, cardIds: play.cards.map((c) => c.id) }, value: playValue(me.hand, play) })
-  }
+  const before = planPlays(me.hand)
+  const options: Option[] = legal.map((p) => {
+    const rest = without(me.hand, p.cards)
+    if (!rest.length) return { action: { type: 'JUAL', playerId, cardIds: p.cards.map((c) => c.id) }, value: 1000 }
+    const after = planPlays(rest)
+    // Value: fewer plays left is good; breaking combos (after not dropping by one) is bad.
+    let v = (before - after) * 3 - (after - (before - 1)) * 2.5
+    const st = strength(p)
+    if (leading) {
+      // Lead weak stuff and shed many cards; keep 2s and big hands for control.
+      v += p.cards.length * 0.6 - st * 2.2
+    } else {
+      v -= st * (rest.length > 5 ? 3.2 : 1.2)
+    }
+    // Someone is about to go out: block hard.
+    if (danger <= 2) v += st * 4 + p.cards.length
+    if (difficulty === 'hard' && next.hand.length === 1 && p.shape.kind === 'single') v += st * 6
+    return { action: { type: 'JUAL', playerId, cardIds: p.cards.map((c) => c.id) }, value: v }
+  })
 
   if (canPass(state, playerId)) {
-    let v = handValue(me.hand) - 1.2
-    if (ownerHand <= 2) v -= 6
+    let v = -0.6
+    if (danger <= 2) v -= 5
+    if (difficulty === 'hard' && gerai.ownerId !== null && state.players[gerai.ownerId].hand.length <= 3) v -= 3
     options.push({ action: { type: 'PASS', playerId }, value: v })
   }
 
-  for (const end of ENDS) {
-    const steal = cilokResult(gerai, end)
-    if (!steal) continue
-    const hand = [...me.hand, steal.card]
-    const blockBonus = nextIsOwner ? 0 : steal.shape.rank * 0.08
-    if (canCilok(state, playerId, false)) {
-      options.push({
-        action: { type: 'CILOK', playerId, stamp: false, end },
-        value: handValue(hand) - 1.5 - (ownerHand <= 2 ? 2 : 0) + blockBonus,
-      })
-    }
-    if (canCilok(state, playerId, true)) {
-      const after = { ...gerai, cards: steal.remaining, shape: steal.shape }
-      const follow = legalPlays(hand, after).filter((p) => beats(p.shape, steal.shape))
-      let best = -Infinity
-      for (const p of follow) best = Math.max(best, playValue(hand, p))
-      // Saving the stamp for later has some value of its own.
-      if (best > -Infinity) {
-        options.push({ action: { type: 'CILOK', playerId, stamp: true, end }, value: best - 1.5 - (danger > 4 ? 1 : 0) })
-      }
-    }
-  }
-
-  if (options.length === 0) return { type: 'PASS', playerId }
-  const noise = difficulty === 'standard' ? 1.6 : 0.2
+  const noise = difficulty === 'standard' ? 1.4 : 0.25
   let best = options[0]
   let bestScore = -Infinity
   for (const o of options) {

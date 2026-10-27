@@ -1,36 +1,32 @@
 import { shapeName } from './rules'
 import type { GameEvent, Player } from './types'
 
-export type Tone = 'jual' | 'cilok' | 'pass' | 'collect' | 'round' | 'info'
+export type Tone = 'jual' | 'big' | 'pass' | 'clear' | 'round' | 'alert' | 'info'
 
 const who = (players: Player[], id: number) => (players[id]?.isHuman ? 'You' : players[id]?.name ?? '?')
 const whose = (players: Player[], id: number) => (players[id]?.isHuman ? 'your' : `${players[id]?.name}'s`)
+const s = (players: Player[], id: number, verb: string) => `${who(players, id)} ${verb}${players[id]?.isHuman ? '' : 's'}`
 
 /** The telemetry banner line for an event. */
 export function describe(event: GameEvent, players: Player[]): { text: string; tone: Tone } | null {
   switch (event.type) {
     case 'deal':
-      return { text: `Round ${event.round}: ${who(players, event.starter)} open${players[event.starter]?.isHuman ? '' : 's'} the first Gerai`, tone: 'round' }
+      return { text: `Round ${event.round}: ${s(players, event.starter, 'open')} the first Gerai`, tone: 'round' }
     case 'jual': {
-      const verb = event.beat === null ? 'opened the Gerai with' : 'JUAL-ed'
-      const tail = event.beat !== null ? `, beating ${whose(players, event.beat)} Gerai` : ''
-      return { text: `${who(players, event.actor)} ${verb} ${shapeName(event.shape, event.cards)}${tail}!`, tone: 'jual' }
-    }
-    case 'cilok': {
-      const side = event.stamp ? ' with the CILOK & JUAL stamp' : ''
-      const end = event.end === 'low' ? 'left' : 'right'
-      return {
-        text: `${who(players, event.actor)} CILOK-ed the ${end} card, a ${event.card.value} (${event.card.dish}), from ${whose(players, event.target)} Gerai${side}! +1 DUIT to ${who(players, event.target)}`,
-        tone: 'cilok',
-      }
+      const name = shapeName(event.shape, event.cards)
+      const big = event.shape.kind === 'five'
+      if (event.beat === null) return { text: `${s(players, event.actor, 'open')} with ${name}${big ? '!' : ''}`, tone: big ? 'big' : 'jual' }
+      return { text: `${who(players, event.actor)} JUAL ${name}, beating ${whose(players, event.beat)} Gerai!`, tone: big ? 'big' : 'jual' }
     }
     case 'pass':
-      return { text: `${who(players, event.actor)} ${players[event.actor]?.isHuman ? 'say' : 'says'} LALU`, tone: 'pass' }
-    case 'collect':
-      return { text: `${who(players, event.actor)} collect${players[event.actor]?.isHuman ? '' : 's'} ${event.count} dishes as HABUAN`, tone: 'collect' }
-    case 'roundEnd':
-      return { text: `${who(players, event.winner)} cleared the stall! Round over`, tone: 'round' }
+      return { text: `${s(players, event.actor, 'say')} LALU`, tone: 'pass' }
+    case 'clear':
+      return { text: `Everyone passed: ${s(players, event.actor, 'win')} the Gerai and ${players[event.actor]?.isHuman ? 'lead' : 'leads'} again`, tone: 'clear' }
+    case 'roundEnd': {
+      const pot = event.payouts.reduce((t, p) => t + p.amount, 0)
+      return { text: `${who(players, event.winner)} cleared the stall! +${pot} DUIT`, tone: 'round' }
+    }
     case 'gameOver':
-      return { text: `${who(players, event.winner)} ${players[event.winner]?.isHuman ? 'are' : 'is'} Raja Pasar Malam!`, tone: 'round' }
+      return { text: `${who(players, event.winner)} ${players[event.winner]?.isHuman ? 'are' : 'is'} Raja Gerai!`, tone: 'round' }
   }
 }

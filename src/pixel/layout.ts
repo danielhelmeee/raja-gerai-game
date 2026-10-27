@@ -6,13 +6,19 @@ export interface SeatL {
   /** Avatar centre-x and the y of its bottom edge (hidden behind the table). */
   avatar: P
   hand: P
-  plate: P
+  /** Where DUIT payouts land for this hawker. */
   coins: P
-  stamp: P
   /** Top-left of the telemetry panel. */
   panel: P
   /** Panel anchored right of the head (landscape) or centred above it (portrait). */
   panelAlign: 'right' | 'center'
+}
+
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 export interface Layout {
@@ -28,7 +34,9 @@ export interface Layout {
   tableRight: number
   handY: number
   gerai: P
-  deck: P
+  /** The alas meja under the played cards. */
+  cloth: Rect
+  discard: P
   cup: P
   grill: P
   lamps: P[]
@@ -43,7 +51,7 @@ export function fitScale(devW: number, devH: number): { scale: number; W: number
   return { scale, W: Math.floor(devW / scale), H: Math.floor(devH / scale) }
 }
 
-export function makeLayout(W: number, H: number, players: number): Layout {
+export function makeLayout(W: number, H: number): Layout {
   const portrait = H > W * 1.1
   const cx = Math.round(W / 2)
   const actionH = portrait ? 86 : 30
@@ -53,55 +61,27 @@ export function makeLayout(W: number, H: number, players: number): Layout {
   const half = Math.min(W / 2 - 6, 236)
   const tableLeft = Math.round(cx - half)
   const tableRight = Math.round(cx + half)
-  const geraiY = Math.round((tableTop + (portrait ? 44 : 38) + handY) / 2)
+  const geraiY = Math.round((tableTop + (portrait ? 36 : 30) + handY) / 2)
+  const clothW = Math.min(W - 24, 5 * 34 + 26)
+  const clothH = CARD_H + 22
+  const cloth = { x: Math.round(cx - clothW / 2), y: Math.round(geraiY - clothH / 2), w: clothW, h: clothH }
 
-  const opp = players - 1
-  const xs = portrait
-    ? ({ 1: [0.5], 2: [0.28, 0.72], 3: [0.18, 0.5, 0.82] }[opp] ?? [0.5]).map((f) => Math.round(W * f))
-    : ({ 1: [0], 2: [-120, 120], 3: [-150, 0, 150] }[opp] ?? [0]).map((d) => cx + d)
+  const xs = portrait ? [0.18, 0.5, 0.82].map((f) => Math.round(W * f)) : [-150, 0, 150].map((d) => cx + d)
 
-  const human: SeatL = portrait
-    ? {
-        avatar: [cx, H],
-        hand: [cx, handY],
-        coins: [22, handY - 16],
-        stamp: [46, handY - 18],
-        plate: [W - 30, handY - 14],
-        panel: [0, 0],
-        panelAlign: 'center',
-      }
-    : {
-        avatar: [cx, H],
-        hand: [cx, handY],
-        coins: [tableLeft + 24, tableBottom - 22],
-        stamp: [tableLeft + 50, tableBottom - 24],
-        plate: [tableRight - 30, tableBottom - 22],
-        panel: [0, 0],
-        panelAlign: 'center',
-      }
+  const human: SeatL = {
+    avatar: [cx, H],
+    hand: [cx, handY],
+    coins: portrait ? [24, handY - 14] : [tableLeft + 26, tableBottom - 20],
+    panel: [0, 0],
+    panelAlign: 'center',
+  }
 
   const seats: SeatL[] = [
     human,
     ...xs.map<SeatL>((x) =>
       portrait
-        ? {
-            avatar: [x, tableTop + 8],
-            hand: [x, tableTop + 14],
-            coins: [x - 20, tableTop + 38],
-            plate: [x + 2, tableTop + 38],
-            stamp: [x + 25, tableTop + 42],
-            panel: [x, tableTop - 74],
-            panelAlign: 'center',
-          }
-        : {
-            avatar: [x, tableTop + 8],
-            hand: [x, tableTop + 14],
-            coins: [x - 30, tableTop + 38],
-            plate: [x, tableTop + 38],
-            stamp: [x + 34, tableTop + 42],
-            panel: [x + 28, tableTop - 42],
-            panelAlign: 'right',
-          },
+        ? { avatar: [x, tableTop + 8], hand: [x, tableTop + 16], coins: [x, tableTop + 34], panel: [x, tableTop - 74], panelAlign: 'center' }
+        : { avatar: [x, tableTop + 8], hand: [x, tableTop + 16], coins: [x - 44, tableTop + 18], panel: [x + 28, tableTop - 42], panelAlign: 'right' },
     ),
   ]
 
@@ -117,8 +97,9 @@ export function makeLayout(W: number, H: number, players: number): Layout {
     tableRight,
     handY,
     gerai: [cx, geraiY],
-    deck: portrait ? [W - 26, geraiY - 74] : [cx + 160, geraiY],
-    cup: portrait ? [24, geraiY - 74] : [cx - 170, geraiY + 4],
+    cloth,
+    discard: portrait ? [W - 24, cloth.y - 26] : [cloth.x + cloth.w + 30, geraiY],
+    cup: portrait ? [22, cloth.y - 26] : [cx - 170, geraiY + 4],
     grill: [cx - (portrait ? 70 : 190), tableTop - 20],
     lamps: (portrait ? [W * 0.3, W * 0.7] : [cx - 78, cx + 78]).map((x) => [Math.round(x), tableTop - (portrait ? 70 : 52)] as P),
     stallY: tableTop - 74,

@@ -6,15 +6,15 @@
 export type Sfx =
   | 'select'
   | 'ui'
-  | 'arm'
-  | 'cancel'
   | 'error'
   | 'deal'
   | 'jual'
-  | 'cilok'
+  | 'combo'
+  | 'royal'
+  | 'alert'
   | 'coin'
   | 'pass'
-  | 'collect'
+  | 'clear'
   | 'turn'
   | 'gong'
   | 'fanfare'
@@ -316,12 +316,6 @@ export class AudioEngine {
         this.note(out, t, 'p50', mtof(88), 0.05, { vol: 0.12 })
         this.note(out, t + 0.05, 'p50', mtof(95), 0.09, { vol: 0.12 })
         break
-      case 'arm':
-        this.arp(t, [79, 83, 86], 0.035, 'p12', 0.06, 0.13, 0)
-        break
-      case 'cancel':
-        this.arp(t, [86, 79], 0.05, 'p12', 0.06, 0.1, 0)
-        break
       case 'error':
         this.note(out, t, 'p50', 130, 0.14, { vol: 0.14, slideTo: 90 })
         break
@@ -335,11 +329,24 @@ export class AudioEngine {
         this.note(out, t, 'tri', 180, 0.14, { vol: 0.4, slideTo: 45 })
         this.arp(t + 0.06, [72, 76, 79, 84], 0.04, 'p50', 0.07, 0.11)
         break
-      case 'cilok':
-        this.note(out, t, 'p12', 300, 0.16, { vol: 0.13, slideTo: 2200 })
-        this.noise(out, t, 0.16, { vol: 0.08, rate: 0.5, rateTo: 2, hp: 1200 })
-        this.note(out, t + 0.17, 'p25', mtof(93), 0.05, { vol: 0.1 })
-        this.noise(out, t + 0.17, 0.05, { vol: 0.08, metal: true, rate: 2 })
+      case 'combo':
+        // Five-card hand: heavy slam plus a quick fanfare run.
+        this.noise(out, t, 0.18, { vol: 0.26, lp: 1800, rate: 0.6 })
+        this.note(out, t, 'tri', 200, 0.2, { vol: 0.45, slideTo: 40 })
+        this.arp(t + 0.08, [72, 76, 79, 84, 88, 91], 0.045, 'p50', 0.08, 0.11)
+        this.note(out, t + 0.36, 'p25', mtof(96), 0.3, { vol: 0.09, echo: 0.4, vibrato: 0.01, decay: false })
+        break
+      case 'royal':
+        this.play('combo', delay)
+        this.arp(t + 0.45, [84, 88, 91, 96], 0.09, 'p50', 0.18, 0.1, 0.45)
+        this.play('gong', delay + 0.5)
+        break
+      case 'alert':
+        // "Last card!" klaxon: two quick high pulses, twice.
+        for (const at of [0, 0.22]) {
+          this.note(out, t + at, 'p12', mtof(93), 0.07, { vol: 0.12, decay: false })
+          this.note(out, t + at + 0.08, 'p12', mtof(89), 0.07, { vol: 0.12, decay: false })
+        }
         break
       case 'coin':
         this.note(out, t, 'p50', mtof(83), 0.07, { vol: 0.13, decay: false })
@@ -349,7 +356,7 @@ export class AudioEngine {
         this.note(out, t, 'p25', mtof(79), 0.08, { vol: 0.09 })
         this.note(out, t + 0.09, 'p25', mtof(74), 0.14, { vol: 0.08 })
         break
-      case 'collect':
+      case 'clear':
         this.arp(t, [72, 74, 77, 79, 81, 84, 86], 0.035, 'p25', 0.06, 0.09)
         this.noise(out, t + 0.25, 0.12, { vol: 0.05, metal: true, rate: 3, echo: 0.3 })
         break

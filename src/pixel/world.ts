@@ -2,7 +2,7 @@ import { ALL_CARDS, sortByGroup, sortCards } from '../game/cards'
 import { PERSONAS, pick } from '../game/personas'
 import { shapeName } from '../game/rules'
 import type { Highlight } from '../game/tutorial'
-import type { End, GameEvent, GameState, PersonaId, Player } from '../game/types'
+import type { GameEvent, GameState, PersonaId, Player } from '../game/types'
 import type { Atlas } from './atlas'
 import { GLYPH_ADV, textWidth } from './font'
 import { fitScale, handSpacing, makeLayout, type Layout, type P } from './layout'
@@ -13,16 +13,13 @@ export interface Snapshot {
   state: GameState
   inGame: boolean
   selected: string[]
-  cilokMode: { stamp: boolean } | null
   highlights: Highlight[]
-  canStamp: boolean
   sortMode: 'value' | 'group'
   scanlines: boolean
 }
 
 export interface Callbacks {
   pickHand: (id: string) => void
-  pickEnd: (end: End) => void
 }
 
 type RGBA = [number, number, number, number]
@@ -55,8 +52,7 @@ interface CardTarget {
   size: Size
   face: Face
   z: number
-  tint?: number
-  zone: 'deck' | 'hand' | 'opp' | 'habuan' | 'pile' | 'gerai'
+  zone: 'deck' | 'hand' | 'opp' | 'discard' | 'gerai'
 }
 interface CardEnt {
   x: number
@@ -96,7 +92,7 @@ interface Particle {
   vy: number
   life: number
   max: number
-  kind: 'steam' | 'smoke' | 'spark' | 'dust'
+  kind: 'steam' | 'smoke' | 'spark'
   color: string
 }
 interface EvLight extends Light {
@@ -105,11 +101,10 @@ interface EvLight extends Light {
 interface CoinFlight {
   from: P
   to: P
-  target: number
   at: number
 }
 
-const MENU_FAN = ['kopitiam-2', 'nasi-1', 'roti-1', 'kuih-2', 'kopitiam-1', 'nasi-2', 'kuih-5']
+const MENU_FAN = ['kopitiam-3', 'nasi-11', 'roti-12', 'kuih-13', 'kopitiam-14', 'nasi-15', 'kuih-7']
 const SIGN_COLORS = ['#FFB347', '#9CFF8A', '#FFD27A', '#7FD6FF', '#FF7AA8', '#FF7A45']
 const MENU_PLAYERS: Player[] = (['you', 'ahseng', 'lina', 'mat'] as PersonaId[]).map((persona, id) => ({
   id,
@@ -117,10 +112,7 @@ const MENU_PLAYERS: Player[] = (['you', 'ahseng', 'lina', 'mat'] as PersonaId[])
   isHuman: id === 0,
   persona,
   hand: [],
-  habuan: [],
   duit: 0,
-  stampUsed: false,
-  total: 0,
   roundScores: [],
 }))
 const SHORT: Record<PersonaId, string> = { you: 'YOU', ahseng: 'AH SENG', lina: 'KAK LINA', mat: 'ABANG MAT' }
@@ -141,13 +133,12 @@ export class World {
   private reactions: Record<number, Reaction> = {}
   private bubbles: Bubble[] = []
   private floats: Float[] = []
-  private stampAnim: Record<number, number> = {}
   private shake = { until: 0, mag: 0 }
   private flash = 0
   private lastSeq: number
   private spotlight: number | null = null
   private hovered: string | null = null
-  private hits: { x: number; y: number; w: number; h: number; hand?: string; end?: End }[] = []
+  private hits: { x: number; y: number; w: number; h: number; hand: string }[] = []
   private nextMenuReaction = 2
   private lit: Draw[] = []
   private em: Draw[] = []
@@ -176,12 +167,12 @@ export class World {
     this.cb = cb
   }
 
-  /** Fit to the canvas's CSS size; returns the scale for the DOM overlay. */
+  /** Fit to the window; returns the scale for the DOM overlay. */
   resize(cssW: number, cssH: number, dpr: number) {
     const fit = fitScale(Math.floor(cssW * dpr), Math.floor(cssH * dpr))
     this.renderer.resize(fit.W, fit.H, fit.scale)
     const first = !this.L
-    this.L = makeLayout(fit.W, fit.H, this.players().length)
+    this.L = makeLayout(fit.W, fit.H)
     if (first) {
       for (const [id, t] of this.targets()) {
         const e = this.cards.get(id)!
@@ -230,8 +221,7 @@ export class World {
 
   pointerDown(x: number, y: number) {
     const h = this.hitAt(x, y)
-    if (h?.hand) this.cb.pickHand(h.hand)
-    else if (h?.end) this.cb.pickEnd(h.end)
+    if (h) this.cb.pickHand(h.hand)
   }
 
   // ───────────────────────── state helpers ─────────────────────────
@@ -247,9 +237,8 @@ export class World {
   private targets(): Map<string, CardTarget> {
     const L = this.L
     const out = new Map<string, CardTarget>()
-    ALL_CARDS.forEach((c, i) => {
-      out.set(c.id, { x: L.deck[0], y: L.deck[1] - Math.floor(i / 4), size: 'big', face: 'back', z: 10 + i * 0.01, zone: 'deck' })
-    })
+    // Undealt cards wait in a stack on the mat, which is where the deal flies from.
+    ALL_CARDS.forEach((c, i) => out.set(c.id, { x: L.gerai[0], y: L.gerai[1] - Math.floor(i / 6), size: 'big', face: 'back', z: 10 + i * 0.01, zone: 'deck' }))
     const s = this.snap.state
     if (!this.snap.inGame || !s.players.length) {
       MENU_FAN.forEach((id, i) => {
@@ -265,44 +254,26 @@ export class World {
         const sp = handSpacing(L, hand.length)
         hand.forEach((c, i) => {
           const lift = this.snap.selected.includes(c.id) ? 10 : this.hovered === c.id ? 4 : 0
-          out.set(c.id, {
-            x: L.cx + (i - (hand.length - 1) / 2) * sp,
-            y: L.handY + CARD_H / 2 - lift,
-            size: 'big',
-            face: 'front',
-            z: 500 + i,
-            zone: 'hand',
-          })
+          out.set(c.id, { x: L.cx + (i - (hand.length - 1) / 2) * sp, y: L.handY + CARD_H / 2 - lift, size: 'big', face: 'front', z: 500 + i, zone: 'hand' })
         })
       } else {
         p.hand.forEach((c, i) => {
           out.set(c.id, { x: seat.hand[0] + (i - (p.hand.length - 1) / 2) * 4, y: seat.hand[1], size: 'mini', face: 'back', z: 300 + i, zone: 'opp' })
         })
       }
-      p.habuan.forEach((c, k) => {
-        out.set(c.id, {
-          x: seat.plate[0] + Math.round((hash(c.id, 1) - 0.5) * 8),
-          y: seat.plate[1] - 3 - Math.floor(k / 2),
-          size: 'mini',
-          face: 'front',
-          z: 200 + pi * 50 + k,
-          zone: 'habuan',
-        })
-      })
     })
-    s.gerai.pile.forEach((c, k) => {
+    s.discard.forEach((c, k) => {
       out.set(c.id, {
-        x: L.gerai[0] + Math.round((hash(c.id, 2) - 0.5) * 70),
-        y: L.gerai[1] - 10 + Math.round((hash(c.id, 3) - 0.5) * 10),
-        size: 'big',
-        face: 'front',
-        z: 250 + k,
-        tint: 0.62,
-        zone: 'pile',
+        x: L.discard[0] + Math.round((hash(c.id, 1) - 0.5) * 8),
+        y: L.discard[1] - Math.floor(k / 3),
+        size: 'mini',
+        face: 'back',
+        z: 200 + k,
+        zone: 'discard',
       })
     })
     const n = s.gerai.cards.length
-    sortCards(s.gerai.cards).forEach((c, i) => {
+    s.gerai.cards.forEach((c, i) => {
       out.set(c.id, { x: L.gerai[0] + (i - (n - 1) / 2) * 34, y: L.gerai[1], size: 'big', face: 'front', z: 280 + i, zone: 'gerai' })
     })
     return out
@@ -324,17 +295,24 @@ export class World {
     }
   }
 
-  private floatAt(seat: number, text: string, color: string) {
+  private floatAt(seat: number, text: string, color: string, delay = 0) {
     const s = this.seatOf(seat)
     const human = this.players()[seat]?.isHuman
-    const [x, y] = human ? [s.plate[0], s.plate[1] - 14] : [s.avatar[0], this.L.tableTop - 52]
-    // Stack labels that land on the same hawker at once.
-    const stacked = this.floats.filter((f) => f.x === x && this.t - f.at < 0.6).length
-    this.floats.push({ x, y: y + stacked * 12, text, color, at: this.t })
+    const [x, y] = human ? [s.coins[0] + 20, s.coins[1] - 14] : [s.avatar[0], this.L.tableTop - 52]
+    const stacked = this.floats.filter((f) => f.x === x && Math.abs(f.at - (this.t + delay)) < 0.6).length
+    this.floats.push({ x, y: y + stacked * 12, text, color, at: this.t + delay })
   }
 
   private light(x: number, y: number, z: number, radius: number, color: string, intensity: number, decay: number) {
     this.evLights.push({ x, y, z, radius, color: rgb(color), intensity, decay })
+  }
+
+  private sparks(x: number, y: number, count: number, colors: string[], speed = 60) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2
+      const v = speed * (0.5 + Math.random())
+      this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: 0, max: 0.5 + Math.random() * 0.4, kind: 'spark', color: pick(colors) })
+    }
   }
 
   private processEvents() {
@@ -349,65 +327,58 @@ export class World {
           this.spotlight = null
           this.flights = []
           this.reactions = {}
-          const n = s.players.length
           const order = new Map<string, number>()
-          s.players.forEach((p, pi) => p.hand.forEach((c, i) => order.set(c.id, i * n + pi)))
+          s.players.forEach((p, pi) => p.hand.forEach((c, i) => order.set(c.id, i * s.players.length + pi)))
           for (const [id, ent] of this.cards) {
-            ent.x = L.deck[0]
-            ent.y = L.deck[1]
+            ent.x = L.gerai[0]
+            ent.y = L.gerai[1]
             ent.vx = ent.vy = 0
             ent.size = 'big'
             ent.face = 'back'
             ent.flip = 1
-            ent.hold = this.t + 0.25 + (order.get(id) ?? 0) * 0.04
+            ent.hold = this.t + 0.3 + (order.get(id) ?? 0) * 0.04
           }
           break
         }
-        case 'jual':
-          this.shake = { until: this.t + 0.2, mag: e.cards.length >= 4 ? 3 : 2 }
-          this.flash = 0.09
-          this.light(L.gerai[0], L.gerai[1], 40, 150, '#FFC870', 1.6, 2.2)
-          for (let i = 0; i < 14; i++) {
-            const a = Math.random() * Math.PI * 2
-            const v = 30 + Math.random() * 60
-            this.particles.push({
-              x: L.gerai[0],
-              y: L.gerai[1],
-              vx: Math.cos(a) * v,
-              vy: Math.sin(a) * v - 30,
-              life: 0,
-              max: 0.5 + Math.random() * 0.3,
-              kind: 'spark',
-              color: Math.random() < 0.5 ? '#FFE08A' : '#FFFFFF',
-            })
-          }
-          this.react(e.actor, e.beat !== null && Math.random() < 0.5 ? 'slap' : 'joy', (p) => p.lines.jual)
+        case 'jual': {
+          const big = e.shape.kind === 'five'
+          const royal = e.shape.five === 'diraja'
+          this.shake = { until: this.t + (big ? 0.35 : 0.18), mag: big ? 3 : 2 }
+          this.flash = royal ? 0.22 : big ? 0.14 : 0.07
+          this.light(L.gerai[0], L.gerai[1], 40, big ? 200 : 140, royal ? '#FFE070' : '#FFC870', big ? 2.2 : 1.4, big ? 1.6 : 2.2)
+          this.sparks(L.gerai[0], L.gerai[1], big ? 34 : 12, royal ? ['#FFE070', '#FF7AA8', '#7FD6FF', '#FFFFFF'] : ['#FFE08A', '#FFFFFF'], big ? 90 : 60)
+          const actor = s.players[e.actor]
+          if (actor && actor.hand.length === 1) {
+            this.react(e.actor, 'joy', (p) => p.lines.last)
+            this.floatAt(e.actor, 'LAST CARD!', '#FF6A5A')
+          } else this.react(e.actor, big ? 'slap' : 'joy', (p) => (big ? p.lines.big : p.lines.jual))
+          if (e.beat !== null && e.beat !== e.actor && (big || Math.random() < 0.35)) this.react(e.beat, 'annoyed', (p) => p.lines.beaten, 0.2)
           break
-        case 'cilok':
-          this.light(L.gerai[0], L.gerai[1], 30, 120, '#FF4A3A', 1.4, 2.5)
-          this.flights.push({ from: this.seatOf(e.actor).coins, to: this.seatOf(e.target).coins, target: e.target, at: this.t + 0.15 })
-          this.react(e.target, 'annoyed', (p) => p.lines.stolen, 0.15)
-          this.react(e.actor, 'sly', (p) => p.lines.cilok)
-          this.floatAt(e.target, '+1 DUIT', '#F4B42A')
-          if (e.stamp) this.stampAnim[e.actor] = this.t
-          break
+        }
         case 'pass':
           this.react(e.actor, 'shrug', (p) => p.lines.pass)
           break
-        case 'collect': {
-          const seat = this.seatOf(e.actor)
-          this.floatAt(e.actor, `+${e.count} HABUAN`, '#3CE08A')
-          this.light(seat.plate[0], seat.plate[1], 30, 70, '#9CFF8A', 1.0, 1.5)
+        case 'clear':
+          this.light(L.discard[0], L.discard[1], 30, 70, '#9CFF8A', 0.9, 1.5)
+          this.react(e.actor, 'sly')
           break
-        }
         case 'roundEnd':
         case 'gameOver':
           this.spotlight = e.winner
-          s.players.forEach((p) => {
-            this.react(p.id, p.id === e.winner ? 'cheer' : 'sad', (ps) => (p.id === e.winner ? ps.lines.win : ps.lines.lose), 0.3)
-            const rs = p.roundScores[p.roundScores.length - 1]
-            if (e.type === 'roundEnd' && rs) this.floatAt(p.id, `${rs.score >= 0 ? '+' : ''}${rs.score}`, rs.score >= 0 ? '#3CE08A' : '#FF6A5A')
-          })
+          s.players.forEach((p) => this.react(p.id, p.id === e.winner ? 'cheer' : 'sad', (ps) => (p.id === e.winner ? ps.lines.win : ps.lines.lose), 0.3))
+          if (e.type === 'roundEnd') {
+            // DUIT showers from every loser to the winner.
+            const to = this.seatOf(e.winner).coins
+            let pot = 0
+            e.payouts.forEach((pay, i) => {
+              pot += pay.amount
+              const from = this.seatOf(pay.id).coins
+              const n = Math.min(8, Math.max(1, Math.ceil(pay.amount / 3)))
+              for (let k = 0; k < n; k++) this.flights.push({ from, to, at: this.t + 0.9 + i * 0.25 + k * 0.07 })
+              this.floatAt(pay.id, `-${pay.amount} DUIT`, '#FF6A5A', 0.6 + i * 0.25)
+            })
+            this.floatAt(e.winner, `+${pot} DUIT`, '#FFE070', 1.8)
+          }
           break
       }
     }
@@ -417,12 +388,10 @@ export class World {
 
   private update(dt: number) {
     if (!this.L) return
-    if (this.L.seats.length !== this.players().length) this.L = makeLayout(this.L.W, this.L.H, this.players().length)
     this.processEvents()
 
     // Cards spring toward their targets; size and face swap mid-flight.
-    const targets = this.targets()
-    for (const [id, tgt] of targets) {
+    for (const [id, tgt] of this.targets()) {
       const e = this.cards.get(id)!
       if (this.t < e.hold) continue
       const key = `${tgt.zone}:${tgt.x}:${tgt.y}`
@@ -461,7 +430,7 @@ export class World {
       p.x += p.vx * dt
       p.y += p.vy * dt
       if (p.kind === 'spark') p.vy += 90 * dt
-      if (p.kind === 'steam' || p.kind === 'smoke') p.vx += Math.sin(this.t * 2 + p.y * 0.2) * 6 * dt
+      else p.vx += Math.sin(this.t * 2 + p.y * 0.2) * 6 * dt
     }
     this.particles = this.particles.filter((p) => p.life < p.max)
 
@@ -469,7 +438,7 @@ export class World {
     this.evLights = this.evLights.filter((l) => l.intensity > 0)
     this.flash = Math.max(0, this.flash - dt * 0.5)
     this.flights = this.flights.filter((f) => this.t - f.at < 0.8)
-    this.floats = this.floats.filter((f) => this.t - f.at < 2)
+    this.floats = this.floats.filter((f) => this.t - f.at < 2.2)
     this.bubbles = this.bubbles.filter((b) => this.t - b.at < 2.4)
 
     // Hawkers chatting on the title screen.
@@ -477,7 +446,7 @@ export class World {
       this.nextMenuReaction = this.t + 2.5 + Math.random() * 3
       const id = 1 + Math.floor(Math.random() * 3)
       const kind = pick<ReactionKind>(['joy', 'sly', 'slap', 'shrug'])
-      this.react(id, kind, (p) => (kind === 'shrug' ? p.lines.pass : kind === 'sly' ? p.lines.cilok : p.lines.jual))
+      this.react(id, kind, (p) => (kind === 'shrug' ? p.lines.pass : kind === 'slap' ? p.lines.big : p.lines.jual))
     }
   }
 
@@ -508,7 +477,7 @@ export class World {
     }
   }
 
-  /** Floating score text on a dark tag, so it reads over anything. */
+  /** Floating text on a dark tag, so it reads over anything. */
   private tagText(str: string, x: number, y: number, color: RGBA) {
     const w = textWidth(str)
     this.rect(this.ui, Math.round(x) - 2, Math.round(y) - 2, w + 4, 11, [0.08, 0.04, 0.08, 0.85 * color[3]])
@@ -535,48 +504,17 @@ export class World {
     const hl = this.snap.highlights
 
     this.drawBackdrop()
-
-    // Hawkers sit behind the table.
     players.forEach((p, i) => {
-      if (p.isHuman) return
-      this.drawHawker(p, i)
+      if (!p.isHuman) this.drawHawker(p, i)
     })
-
     this.drawTable()
-
-    // Table props per seat.
-    players.forEach((p, i) => {
-      const seat = this.seatOf(i)
-      this.spr(this.lit, 'plate', seat.plate[0] - 15, seat.plate[1] - 9)
-      const inFlight = this.flights.filter((f) => f.target === i && this.t - f.at < 0.7).length
-      const count = Math.max(0, p.duit - inFlight)
-      for (let k = 0; k < count; k++) {
-        const stack = Math.floor(k / 6)
-        this.spr(this.lit, 'coin:slice', seat.coins[0] - 4 + (stack % 2) * 10 - Math.floor(stack / 2) * 5, seat.coins[1] - 2 - (k % 6) * 2 - Math.floor(stack / 2) * 3)
-      }
-      const anim = this.stampAnim[i]
-      const at = anim !== undefined ? Math.min(1, (this.t - anim) / 0.5) : 1
-      const used = p.stampUsed && at >= 0.5
-      const hop = anim !== undefined && at < 1 ? Math.sin(at * Math.PI) * 12 : 0
-      this.spr(this.lit, used ? 'stamp:used' : 'stamp', seat.stamp[0] - 8, seat.stamp[1] - 16 - hop, used ? { color: [0.7, 0.66, 0.66, 1] } : {})
-      if (anim !== undefined && this.t - anim < 1.2) this.spr(this.em, 'halo:14', seat.stamp[0] - 14, seat.stamp[1] - 22, { color: [1, 0.5, 0.2, 1 - (this.t - anim) / 1.2] })
-      if (i === 0 && this.snap.canStamp) this.spr(this.em, 'ring:small', seat.stamp[0] - 12, seat.stamp[1] - 8, { color: [1, 0.7, 0.2, this.pulse(4) * 0.7] })
-    })
-
+    this.drawCloth(inGame && s.status === 'playing' && !s.gerai.cards.length)
     this.spr(this.lit, 'cup', L.cup[0] - 7, L.cup[1] - 8)
-    if (inGame && !s.gerai.cards.length && s.status === 'playing') {
-      // Dotted outline marks the empty Gerai.
-      for (let x = -60; x <= 60; x += 4) {
-        this.rect(this.lit, L.gerai[0] + x, L.gerai[1] - 26, 2, 1, rgba('#C9985A'))
-        this.rect(this.lit, L.gerai[0] + x, L.gerai[1] + 25, 2, 1, rgba('#C9985A'))
-      }
-    }
-
     this.drawCards()
     this.drawParticles()
     this.drawFlights()
     this.drawHighlights(hl)
-    this.drawLights()
+    for (const l of this.evLights) this.lights.push(l)
     if (inGame) {
       players.forEach((p, i) => {
         if (!p.isHuman) this.drawTelemetry(p, i, hl.some((h) => h.kind === 'telemetry'))
@@ -585,7 +523,8 @@ export class World {
     }
     this.drawBubbles()
     for (const f of this.floats) {
-      const a = (this.t - f.at) / 2
+      const a = (this.t - f.at) / 2.2
+      if (a < 0) continue
       this.tagText(f.text, f.x - textWidth(f.text) / 2, f.y - Math.round(a * 26), rgba(f.color, a > 0.75 ? (1 - a) / 0.25 : 1))
     }
 
@@ -599,6 +538,8 @@ export class World {
       flash: [this.flash, this.flash * 0.75, this.flash * 0.3],
       shake: shaking ? [(Math.random() - 0.5) * 2 * this.shake.mag, (Math.random() - 0.5) * 2 * this.shake.mag] : [0, 0],
       scanlines: this.snap.scanlines,
+      // Your hand never sinks below this brightness, whatever the lamps are doing.
+      floor: { x: 0, y: L.handY - 14, w: L.W, h: CARD_H + 16, level: 0.92 },
     })
   }
 
@@ -609,7 +550,6 @@ export class World {
     bands.forEach((c, i) => this.rect(this.lit, 0, (i * skyH) / bands.length, L.W, skyH / bands.length + 1, rgba(c)))
     this.rect(this.lit, 0, skyH, L.W, L.H - skyH, rgba('#1E1722'))
 
-    // Distant stars and lanterns in the strip of sky.
     for (let i = 0; i < 24; i++) {
       const x = Math.floor(hash(`s${i}`) * L.W)
       const y = Math.floor(hash(`s${i}`, 2) * Math.max(4, L.stallY + 6))
@@ -635,11 +575,9 @@ export class World {
         }
       }
     }
-    for (let i = 0; i < 4; i++) {
-      this.lights.push({ x: (L.W * (i + 0.5)) / 4, y: L.stallY + 8, z: 26, radius: 90, color: rgb('#FFC870'), intensity: 0.35 })
-    }
+    for (let i = 0; i < 4; i++) this.lights.push({ x: (L.W * (i + 0.5)) / 4, y: L.stallY + 8, z: 26, radius: 90, color: rgb('#FFC870'), intensity: 0.35 })
 
-    // Stalls with neon signs.
+    // Stalls with neon signs, sitting a little higher so the glow clears the hawkers' heads.
     const n = Math.ceil(L.W / 104) + 1
     const x0 = L.cx - (n * 104) / 2
     for (let i = 0; i < n; i++) {
@@ -649,11 +587,9 @@ export class World {
       const sign = SIGNS[k]
       const col = SIGN_COLORS[k]
       const buzz = hash(sign) < 0.35 && Math.sin(this.t * 13 + i) > 0.92 ? 0.25 : 1
-      const tw = textWidth(sign)
-      this.text(this.em, sign, sx + 55 - tw / 2, L.stallY + 29, rgba(col, buzz))
-      this.spr(this.em, 'halo:24', sx + 55 - 24, L.stallY + 9, { color: rgba(col, 0.22 * buzz) })
-      this.lights.push({ x: sx + 55, y: L.stallY + 36, z: 18, radius: 70, color: rgb(col), intensity: 0.55 * buzz })
-      // Shoppers browsing.
+      this.text(this.em, sign, sx + 55 - textWidth(sign) / 2, L.stallY + 25, rgba(col, buzz))
+      this.spr(this.em, 'halo:24', sx + 55 - 24, L.stallY + 4, { color: rgba(col, 0.22 * buzz) })
+      this.lights.push({ x: sx + 55, y: L.stallY + 32, z: 18, radius: 70, color: rgb(col), intensity: 0.55 * buzz })
       for (let j = 0; j < 2; j++) {
         const fx = sx + 22 + j * 46 + Math.round(Math.sin(this.t * 0.3 + i * 2 + j) * 6)
         const f = Math.floor(this.t * 2 + i + j) % 2
@@ -661,7 +597,6 @@ export class World {
       }
     }
 
-    // Satay grill glow and smoke.
     const [gx, gy] = L.grill
     this.spr(this.lit, 'grill', gx - 26, gy - 9)
     const fl = 0.75 + 0.25 * Math.sin(this.t * 17) * Math.sin(this.t * 5.3)
@@ -669,7 +604,6 @@ export class World {
     this.spr(this.em, 'halo:14', gx - 14, gy - 20, { color: rgba('#FF7A2A', 0.4 * fl) })
     this.lights.push({ x: gx, y: gy, z: 12, radius: 60, color: rgb('#FF7A2A'), intensity: 0.9 * fl })
 
-    // Hanging lamps over the table: swaying, flickering incandescents.
     L.lamps.forEach(([lx, ly], i) => {
       const sway = Math.round(Math.sin(this.t * 0.8 + i * 1.7) * 2)
       const flick = 0.92 + 0.08 * Math.sin(this.t * 23 + i * 3) + (Math.random() < 0.004 ? -0.4 : 0)
@@ -690,8 +624,8 @@ export class World {
         intensity: 1.5 * flick,
       })
     })
-    // Soft fill so your own hand always reads.
-    this.lights.push({ x: L.cx, y: L.H + 10, z: 90, radius: L.portrait ? 280 : 230, color: rgb('#FFE6C8'), intensity: 0.75 })
+    // A stall lamp just behind you, so your own hand is warmly lit.
+    this.lights.push({ x: L.cx, y: L.H + 6, z: 60, radius: L.portrait ? 300 : 250, color: rgb('#FFE2B8'), intensity: 1.1 })
   }
 
   private drawTable() {
@@ -709,10 +643,38 @@ export class World {
         if (w > 0) this.spr(this.lit, `wood:${v}`, cx0, y, { sx, sw: w, sh: h })
       }
     }
-    for (let x = L.tableLeft; x < L.tableRight; x += 64) {
-      this.spr(this.lit, 'table:front', x, L.tableBottom, { sw: Math.min(64, L.tableRight - x) })
-    }
+    for (let x = L.tableLeft; x < L.tableRight; x += 64) this.spr(this.lit, 'table:front', x, L.tableBottom, { sw: Math.min(64, L.tableRight - x) })
     for (const lx of [L.tableLeft + 6, L.tableRight - 14]) this.rect(this.lit, lx, L.tableBottom + 10, 8, L.H - L.tableBottom - 10, rgba('#3E2112'))
+  }
+
+  /** The batik alas meja the Gerai is played onto. */
+  private drawCloth(empty: boolean) {
+    const { x, y, w, h } = this.L.cloth
+    this.rect(this.lit, x + 2, y + 2, w, h, rgba('#1A0E10'))
+    for (let ty = y + 5; ty < y + h - 5; ty += 16) {
+      for (let tx = x + 5; tx < x + w - 5; tx += 16) {
+        this.spr(this.lit, 'cloth:tile', tx, ty, { sw: Math.min(16, x + w - 5 - tx), sh: Math.min(16, y + h - 5 - ty) })
+      }
+    }
+    for (let tx = x; tx < x + w; tx += 16) {
+      const sw = Math.min(16, x + w - tx)
+      this.spr(this.lit, 'cloth:h', tx, y, { sw })
+      this.spr(this.lit, 'cloth:h', tx, y + h - 5, { sw })
+    }
+    for (let ty = y + 5; ty < y + h - 5; ty += 16) {
+      const sh = Math.min(16, y + h - 5 - ty)
+      this.spr(this.lit, 'cloth:v', x, ty, { sh })
+      this.spr(this.lit, 'cloth:v', x + w - 5, ty, { sh, flipX: true })
+    }
+    // Tassels on the short ends.
+    for (let ty = y + 3; ty < y + h - 2; ty += 4) {
+      this.rect(this.lit, x - 2, ty, 2, 1, rgba('#F4B42A'))
+      this.rect(this.lit, x + w, ty, 2, 1, rgba('#F4B42A'))
+    }
+    if (empty) {
+      const label = 'OPEN THE GERAI'
+      this.text(this.lit, label, x + w / 2 - textWidth(label) / 2, y + h / 2 - 3, rgba('#6A78B0', 0.9))
+    }
   }
 
   private poseFor(id: number): Pose {
@@ -740,24 +702,23 @@ export class World {
 
   private drawHawker(p: Player, i: number) {
     const seat = this.seatOf(i)
-    const pose = this.poseFor(i)
-    this.spr(this.lit, `hawker:${p.persona}:${pose}`, seat.avatar[0] - HAWKER_W / 2, seat.avatar[1] - HAWKER_H)
+    const name = `hawker:${p.persona}:${this.poseFor(i)}`
+    const x = seat.avatar[0] - HAWKER_W / 2
+    const y = seat.avatar[1] - HAWKER_H
+    this.spr(this.lit, name, x, y)
+    // Block the neon glow behind the hawker so signs never shine through a head.
+    this.spr(this.em, name, x, y, { color: [0, 0, 0, 1] })
     const s = this.snap.state
     if (this.snap.inGame && s.status === 'playing' && s.turn === i) {
       this.spr(this.em, 'ring:avatar', seat.avatar[0] - 26, this.L.tableTop - 4, { color: rgba('#00A859', this.pulse(5)) })
       this.lights.push({ x: seat.avatar[0], y: this.L.tableTop - 6, z: 20, radius: 50, color: rgb('#00E07A'), intensity: 0.5 * this.pulse(5) })
     }
-    if (this.spotlight === i) {
-      this.lights.push({ x: seat.avatar[0], y: seat.avatar[1] - 30, z: 60, radius: 80, color: rgb('#FFF0C0'), intensity: 1.3 })
-    }
+    if (this.spotlight === i) this.lights.push({ x: seat.avatar[0], y: seat.avatar[1] - 30, z: 60, radius: 80, color: rgb('#FFF0C0'), intensity: 1.3 })
   }
 
   private drawCards() {
-    const L = this.L
     const s = this.snap.state
     const targets = this.targets()
-    const geraiSorted = sortCards(s.gerai.cards)
-    const ends: Record<End, string | undefined> = { low: geraiSorted[0]?.id, high: geraiSorted[geraiSorted.length - 1]?.id }
     const list = [...this.cards.entries()].map(([id, e]) => {
       const t = targets.get(id)!
       const moving = Math.hypot(t.x - e.x, t.y - e.y) > 3 || this.t < e.hold
@@ -775,28 +736,11 @@ export class World {
       let name: string
       if (e.size === 'big') name = e.face === 'front' ? `card:${id}` : 'card:back'
       else name = e.face === 'front' ? `mini:${id.split('-')[0]}` : 'mini:back'
-      const tint = t.tint ?? 1
-      this.spr(this.lit, name, x, y, { w: dw, h, color: [tint, tint, tint * 0.95, 1] })
+      const sel = this.snap.selected.includes(id) && t.zone === 'hand'
+      const lift = sel ? 1.12 : 1
+      this.spr(this.lit, name, x, y, { w: dw, h, color: [lift, lift, lift, 1] })
       if (canPick && t.zone === 'hand') this.hits.push({ x, y, w: dw, h: h + 12, hand: id })
-      if (canPick && this.snap.cilokMode && t.zone === 'gerai' && (id === ends.low || id === ends.high)) {
-        this.hits.push({ x: x - 2, y: y - 14, w: dw + 4, h: h + 16, end: id === ends.low ? 'low' : 'high' })
-      }
-      if (this.snap.selected.includes(id) && t.zone === 'hand') this.frameRect(this.em, x - 1, y - 1, dw + 2, h + 2, rgba('#00E07A', 0.9))
-    }
-    // CILOK: both end dishes glow red with an arrow, waiting for a tap.
-    if (this.snap.cilokMode) {
-      for (const end of ['low', 'high'] as End[]) {
-        const id = ends[end]
-        if (!id) continue
-        const e = this.cards.get(id)!
-        const x = Math.round(e.x - CARD_W / 2)
-        const y = Math.round(e.y - CARD_H / 2)
-        this.frameRect(this.em, x - 2, y - 2, CARD_W + 4, CARD_H + 4, rgba('#FF4A3A', this.pulse(8)), 2)
-        this.spr(this.ui, 'arrow', x + CARD_W / 2 - 3, y - 10 + Math.round(Math.sin(this.t * 8) * 2), { color: rgba('#FF6A5A') })
-      }
-      const label = 'TAP AN END DISH TO CILOK'
-      this.rect(this.ui, L.gerai[0] - textWidth(label) / 2 - 4, L.gerai[1] - 48, textWidth(label) + 8, 11, [0.08, 0.04, 0.06, 0.85])
-      this.text(this.ui, label, L.gerai[0] - textWidth(label) / 2, L.gerai[1] - 46, rgba('#FF8A7A'))
+      if (sel) this.frameRect(this.em, x - 1, y - 1, dw + 2, h + 2, rgba('#00E07A', 0.9))
     }
   }
 
@@ -820,7 +764,6 @@ export class World {
       if (p.kind === 'spark') {
         this.spr(this.em, a < 0.5 ? 'sparkle' : 'halo:4', Math.round(p.x) - 2, Math.round(p.y) - 2, { color: rgba(p.color, 1 - a) })
       } else {
-        // Puffs grow then shrink away, no blending: stays crisp.
         const size = p.kind === 'smoke' ? Math.round(1 + Math.sin(a * Math.PI) * 3) : Math.round(1 + Math.sin(a * Math.PI) * 2)
         const shade = p.kind === 'smoke' ? 0.55 : 0.95
         this.rect(this.lit, Math.round(p.x - size / 2), Math.round(p.y - size / 2), size, size, [shade, shade, shade, 1])
@@ -832,7 +775,6 @@ export class World {
     const L = this.L
     const c = rgba('#00E07A', this.pulse(6))
     const s = this.snap.state
-    const geraiSorted = sortCards(s.gerai.cards)
     const cardBox = (id: string) => {
       const e = this.cards.get(id)
       if (!e) return
@@ -841,57 +783,22 @@ export class World {
       this.frameRect(this.em, Math.round(e.x - w / 2) - 2, Math.round(e.y - h / 2) - 2, w + 4, h + 4, c, 2)
     }
     for (const h of hl) {
-      switch (h.kind) {
-        case 'cards':
-          h.ids.forEach((id) => {
-            if (!this.snap.selected.includes(id)) cardBox(id)
-          })
-          break
-        case 'hand':
-          s.players[0]?.hand.forEach((card) => cardBox(card.id))
-          break
-        case 'gerai':
-          this.frameRect(this.em, L.gerai[0] - 110, L.gerai[1] - 34, 220, 64, c, 2)
-          break
-        case 'geraiEnd': {
-          const ids = h.end === 'both' ? [geraiSorted[0], geraiSorted[geraiSorted.length - 1]] : [h.end === 'low' ? geraiSorted[0] : geraiSorted[geraiSorted.length - 1]]
-          ids.forEach((card) => card && !this.snap.cilokMode && cardBox(card.id))
-          break
-        }
-        case 'plate': {
-          const p = this.seatOf(h.seat).plate
-          this.spr(this.em, 'ring:plate', p[0] - 19, p[1] - 12, { color: c })
-          break
-        }
-        case 'coins': {
-          const p = this.seatOf(h.seat).coins
-          this.spr(this.em, 'ring:small', p[0] - 12, p[1] - 8, { color: c })
-          break
-        }
-        case 'stamp': {
-          const p = this.seatOf(h.seat).stamp
-          this.spr(this.em, 'ring:small', p[0] - 12, p[1] - 8, { color: c })
-          break
-        }
-      }
+      if (h.kind === 'cards') h.ids.forEach((id) => !this.snap.selected.includes(id) && cardBox(id))
+      else if (h.kind === 'hand') s.players[0]?.hand.forEach((card) => cardBox(card.id))
+      else if (h.kind === 'gerai') this.frameRect(this.em, L.cloth.x - 3, L.cloth.y - 3, L.cloth.w + 6, L.cloth.h + 6, c, 2)
+      else if (h.kind === 'discard') this.spr(this.em, 'ring:pile', L.discard[0] - 16, L.discard[1] - 14, { color: c })
     }
-  }
-
-  private drawLights() {
-    for (const l of this.evLights) this.lights.push(l)
   }
 
   private drawTelemetry(p: Player, i: number, glow: boolean) {
     const seat = this.seatOf(i)
     const s = this.snap.state
     const name = this.L.portrait ? SHORT[p.persona] : p.name.toUpperCase()
-    const stats: [string, string][] = [
-      ['icon:card', String(p.hand.length)],
-      ['icon:coin', String(p.duit)],
-      ['icon:trophy', String(p.habuan.length)],
+    const stats: [string, string, string][] = [
+      ['icon:card', String(p.hand.length), '#5A3A26'],
+      ['icon:coin', String(p.duit), p.duit < 0 ? '#C8352B' : '#9C6A22'],
     ]
-    const total = `=${p.total}`
-    const statsW = stats.reduce((w, [, v]) => w + 9 + textWidth(v) + 4, 0) + textWidth(total)
+    const statsW = stats.reduce((w, [, v]) => w + 9 + textWidth(v) + 5, 0)
     const w = Math.max(textWidth(name) + 10, statsW) + 8
     const h = 22
     let x = seat.panel[0]
@@ -906,24 +813,31 @@ export class World {
     this.rect(this.ui, x + 4, y + 4, 5, 5, rgba(PERSONAS[p.persona].accent))
     this.text(this.ui, name, x + 12, y + 3, rgba('#3B2416'))
     let sx = x + 4
-    for (const [icon, v] of stats) {
+    for (const [icon, v, col] of stats) {
       this.spr(this.ui, icon, sx, y + 12)
-      this.text(this.ui, v, sx + 9, y + 12, rgba('#5A3A26'))
-      sx += 9 + textWidth(v) + 4
+      this.text(this.ui, v, sx + 9, y + 12, rgba(col))
+      sx += 9 + textWidth(v) + 5
     }
-    this.text(this.ui, total, sx, y + 12, rgba('#00A859'))
+    // Dai Di etiquette: everyone must know when a hawker is on their last card.
+    if (s.status === 'playing' && p.hand.length === 1 && Math.floor(this.t * 3) % 2 === 0) {
+      const tag = 'LAST CARD!'
+      this.rect(this.ui, x, y + h + 1, textWidth(tag) + 6, 10, rgba('#C8352B'))
+      this.text(this.ui, tag, x + 3, y + h + 2, rgba('#FFFFFF'))
+    }
   }
 
   private drawGeraiLabel() {
     const L = this.L
     const s = this.snap.state
-    if (s.status !== 'playing') return
-    const owner = s.gerai.ownerId !== null ? s.players[s.gerai.ownerId] : null
-    const label = owner ? `GERAI: ${owner.isHuman ? 'YOURS' : this.L.portrait ? SHORT[owner.persona] : owner.name} - ${shapeName(s.gerai.shape!, s.gerai.cards)}` : 'GERAI KOSONG: OPEN WITH ANY SET'
+    if (s.status !== 'playing' || !s.gerai.shape) return
+    const owner = s.players[s.gerai.ownerId!]
+    const who = owner.isHuman ? 'YOURS' : L.portrait ? SHORT[owner.persona] : owner.name
+    const label = `${who}: ${shapeName(s.gerai.shape, s.gerai.cards)}`
     const tw = textWidth(label)
-    const y = L.gerai[1] + 26
-    this.rect(this.ui, L.gerai[0] - tw / 2 - 4, y - 2, tw + 8, 11, [0.08, 0.04, 0.08, 0.82])
-    this.text(this.ui, label, L.gerai[0] - tw / 2, y, rgba('#FFE7B0'))
+    const y = L.cloth.y + L.cloth.h + 4
+    const five = s.gerai.shape.kind === 'five'
+    this.rect(this.ui, L.gerai[0] - tw / 2 - 4, y - 2, tw + 8, 11, five ? rgba('#7A2335', 0.92) : [0.08, 0.04, 0.08, 0.82])
+    this.text(this.ui, label, L.gerai[0] - tw / 2, y, rgba(five ? '#FFE070' : '#FFE7B0'))
   }
 
   private drawBubbles() {
@@ -931,8 +845,7 @@ export class World {
       const e = this.t - b.at
       if (e < 0) continue
       const seat = this.seatOf(b.seat)
-      const tw = textWidth(b.text)
-      const w = tw + 8
+      const w = textWidth(b.text) + 8
       const pop = e < 0.12 ? e / 0.12 : 1
       let x = seat.avatar[0] + 10
       if (x + w > this.L.W - 2) x = seat.avatar[0] - 10 - w

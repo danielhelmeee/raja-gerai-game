@@ -4,44 +4,33 @@ export interface Persona {
   id: PersonaId
   name: string
   stall: string
-  skin: string
-  shirt: string
-  apron: string
   accent: string
   lines: {
     jual: string[]
-    stolen: string[]
-    cilok: string[]
+    big: string[]
+    beaten: string[]
     pass: string[]
+    last: string[]
     win: string[]
     lose: string[]
   }
 }
 
+const NONE = { jual: [], big: [], beaten: [], pass: [], last: [], win: [], lose: [] }
+
 export const PERSONAS: Record<PersonaId, Persona> = {
-  you: {
-    id: 'you',
-    name: 'You',
-    stall: 'Gerai Anda',
-    skin: '#C68B59',
-    shirt: '#00A859',
-    apron: '#FBF6EA',
-    accent: '#00A859',
-    lines: { jual: [], stolen: [], cilok: [], pass: [], win: [], lose: [] },
-  },
+  you: { id: 'you', name: 'You', stall: 'Gerai Anda', accent: '#00A859', lines: NONE },
   ahseng: {
     id: 'ahseng',
     name: 'Uncle Ah Seng',
     stall: 'Kopitiam Ah Seng',
-    skin: '#E8C095',
-    shirt: '#F2EFE6',
-    apron: '#3B6FB6',
     accent: '#3B6FB6',
     lines: {
       jual: ['Wah, steady lah!', 'Hot hot, come buy!', 'Uncle still got it!'],
-      stolen: ['Aiyo! My dish!', 'Eh eh eh, why like that?', 'Wah, you cilok me ah?'],
-      cilok: ['Uncle borrow first ya.', 'Heh, thank you!'],
+      big: ['Huat ah! Big one!', 'Uncle special!'],
+      beaten: ['Aiyo!', 'Eh, why like that?', 'Wah, so fierce ah?'],
       pass: ['Lalu, lalu.', 'Uncle rest a while.'],
+      last: ['Last one, ah!', 'Uncle almost done!'],
       win: ['Kopi on the house!', 'Huat ah!'],
       lose: ['Aiyo, next round lah.'],
     },
@@ -50,15 +39,13 @@ export const PERSONAS: Record<PersonaId, Persona> = {
     id: 'lina',
     name: 'Kak Lina',
     stall: 'Nasi Lemak Kak Lina',
-    skin: '#D9A273',
-    shirt: '#E2557A',
-    apron: '#FFE9A8',
     accent: '#E2557A',
     lines: {
       jual: ['Sedap tak terkata!', 'Laku keras, adik!', 'Habis licin!'],
-      stolen: ['Eh! Kurang asam!', 'Siapa cilok tu?!', 'Amboi, beraninya!'],
-      cilok: ['Kak pinjam sekejap ye.', 'Hehe, rezeki!'],
+      big: ['Amboi, padu!', 'Set lengkap!'],
+      beaten: ['Eh! Kurang asam!', 'Amboi, beraninya!', 'Alamak!'],
       pass: ['Lalu dulu.', 'Kak tunggu.'],
+      last: ['Tinggal satu!', 'Kak dah nak habis!'],
       win: ['Alhamdulillah, laku!', 'Nasi lemak juara!'],
       lose: ['Takpe, esok ada lagi.'],
     },
@@ -67,15 +54,13 @@ export const PERSONAS: Record<PersonaId, Persona> = {
     id: 'mat',
     name: 'Abang Mat',
     stall: 'Roti Abang Mat',
-    skin: '#B97A4E',
-    shirt: '#7A3E9D',
-    apron: '#F4B42A',
     accent: '#F4B42A',
     lines: {
       jual: ['Mantap, bang!', 'Pap! Terbaik!', 'Roti panas, panas!'],
-      stolen: ['Woi! Pulangkan!', 'Alamak, kena cilok!', 'Ish, licik betul!'],
-      cilok: ['Abang ambil sikit.', 'Cilok sikit je!'],
+      big: ['Gempak gila!', 'Ambik kau!'],
+      beaten: ['Woi!', 'Alamak, kena!', 'Ish, licik betul!'],
       pass: ['Lalu, bang.', 'Tak boleh lawan.'],
+      last: ['Satu lagi, bang!', 'Nak menang dah!'],
       win: ['Abang Mat juara!', 'Gempak!'],
       lose: ['Rugi, rugi...'],
     },

@@ -18,13 +18,11 @@ export function PixelStage() {
     state: game.state,
     inGame: game.screen === 'game',
     selected: game.selected,
-    cilokMode: game.cilokMode,
     highlights: game.highlights,
-    canStamp: game.can.stamp,
     sortMode: settings.sortMode,
     scanlines: settings.scanlines,
   }
-  const callbacks = { pickHand: game.toggleSelect, pickEnd: game.chooseEnd }
+  const callbacks = { pickHand: game.toggleSelect }
 
   useEffect(() => {
     world.current?.setSnapshot(snapshot)
@@ -50,6 +48,7 @@ export function PixelStage() {
       const root = document.documentElement.style
       root.setProperty('--s', `${cssScale}px`)
       root.setProperty('--action-h', `${layout.actionH * cssScale}px`)
+      root.setProperty('--table-top', `${layout.tableTop * cssScale}px`)
       root.setProperty('--portrait', layout.portrait ? '1' : '0')
       document.documentElement.dataset.layout = layout.portrait ? 'portrait' : 'landscape'
     }

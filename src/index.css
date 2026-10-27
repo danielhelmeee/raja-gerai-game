@@ -86,7 +86,7 @@ body,
     background: var(--hijau);
     color: #fff;
   }
-  .btn-cilok {
+  .btn-red {
     background: var(--sambal);
     color: #fff;
   }
@@ -138,7 +138,7 @@ body,
   font-family: 'Silkscreen', monospace;
   font-weight: 700;
   color: #ffe9b0;
-  font-size: max(calc(var(--s) * 30), 64px);
+  font-size: max(calc(var(--s) * 22), 48px);
   line-height: 0.9;
   text-shadow:
     var(--u) 0 0 #ff7a45,

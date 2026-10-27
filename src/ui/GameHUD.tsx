@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import { audio } from '../audio/AudioEngine'
 import { PERSONAS } from '../game/personas'
-import { cilokResult } from '../game/rules'
 import { useGame, type ActionId } from '../state/GameContext'
 import { useSettings } from '../state/settings'
 import { AudioToggles, click, Modal } from './common'
 
 const TONE_STYLE: Record<string, string> = {
   jual: 'bg-[#00A859] text-white',
-  cilok: 'bg-[#C8352B] text-white',
+  big: 'bg-[#7A2335] text-[#FFE070]',
   pass: 'bg-[#FBF3DF] text-[#3B2416]',
-  collect: 'bg-[#F4B42A] text-[#3B2416]',
+  clear: 'bg-[#F4B42A] text-[#3B2416]',
   round: 'bg-[#3B2416] text-[#F4B42A]',
+  alert: 'bg-[#C8352B] text-white',
   info: 'bg-[#FBF3DF] text-[#3B2416]',
 }
 
@@ -68,7 +68,7 @@ function Banner() {
   )
 }
 
-function PlayerStats({ compact }: { compact?: boolean }) {
+function PlayerStats() {
   const { state } = useGame()
   const me = state.players[0]
   if (!me) return null
@@ -81,32 +81,30 @@ function PlayerStats({ compact }: { compact?: boolean }) {
       <span className="inline-block h-[max(calc(var(--s)*3),6px)] w-[max(calc(var(--s)*3),6px)] bg-[#00A859]" />
       <span>You</span>
       <span title="Cards in hand">🂠{me.hand.length}</span>
-      <span title="Duit coins">🪙{me.duit}</span>
-      <span title="Habuan">🏆{me.habuan.length}</span>
-      {!compact && <span className="text-kopi/60">Total {me.total}</span>}
+      <span title="DUIT" className={me.duit < 0 ? 'text-[#C8352B]' : ''}>
+        🪙{me.duit}
+      </span>
       {active && <span className="blink bg-[#00A859] px-1 text-white">Your turn</span>}
     </div>
   )
 }
 
 function ActionBar() {
-  const { state, can, jual, cilok, cilokMode, pass, selectionCheck, selected, highlights, tutorial } = useGame()
+  const { state, can, jual, pass, selectionCheck, selected, clearSelection, highlights } = useGame()
   const { settings, update } = useSettings()
   const me = state.players[0]
   if (!me || state.status !== 'playing') return null
   const myTurn = state.turn === 0
   const target = (id: ActionId) => highlights.some((h) => h.kind === 'button' && h.id === id)
   const current = state.players[state.turn]
-  const ends = { low: cilokResult(state.gerai, 'low')?.card, high: cilokResult(state.gerai, 'high')?.card }
 
   let hint: string
   if (!myTurn) hint = `${current.name} is thinking…`
-  else if (cilokMode) hint = `Tap an end of the Gerai: ← ${ends.low?.value ?? ''} or ${ends.high?.value ?? ''} →`
-  else if (state.subPhase === 'afterCilok') hint = selected.length ? selectionCheck.reason : 'Stamped! Now JUAL something that beats the Gerai, or LALU.'
   else if (selected.length) hint = selectionCheck.reason
-  else if (!state.gerai.cards.length) hint = 'Your Gerai to open: tap dishes, then JUAL any shape.'
-  else hint = 'Beat the Gerai, CILOK an end dish, or LALU.'
-  const hintTone = myTurn && selected.length && !cilokMode ? (selectionCheck.ok ? 'text-[#00A859]' : 'text-[#C8352B]') : 'text-kopi'
+  else if (state.opening) hint = 'You hold the Kopitiam 3: open with a play that includes it.'
+  else if (!state.gerai.cards.length) hint = 'Your lead: play any single, pair, three or 5-card hand.'
+  else hint = `Beat the Gerai with ${state.gerai.shape!.count} card${state.gerai.shape!.count > 1 ? 's' : ''}, or LALU.`
+  const hintTone = myTurn && selected.length ? (selectionCheck.ok ? 'text-[#00A859]' : 'text-[#C8352B]') : 'text-kopi'
 
   return (
     <div
@@ -120,45 +118,28 @@ function ActionBar() {
         <div className={`px-panel pointer-events-auto px-text truncate !leading-tight ${hintTone}`} style={{ padding: 'max(calc(var(--s)*1),3px) max(calc(var(--s)*3),8px)' }}>
           {hint}
         </div>
+      </div>
+      <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-[max(calc(var(--s)*2),6px)]">
+        <button className={`px-btn btn-jual min-w-[max(calc(var(--s)*34),80px)] ${target('jual') ? 'tut-target' : ''}`} disabled={!can.jual} onClick={jual}>
+          Jual{selected.length ? ` (${selected.length})` : ''}
+        </button>
+        <button className={`px-btn btn-plain min-w-[max(calc(var(--s)*34),80px)] ${target('pass') ? 'tut-target' : ''}`} disabled={!can.pass} onClick={pass}>
+          Lalu
+        </button>
         <button
-          className="px-btn btn-ghost pointer-events-auto !px-2 !text-[max(calc(var(--s)*4),9px)] [html[data-layout=portrait]_&]:hidden"
+          className="px-btn btn-ghost !px-2 !text-[max(calc(var(--s)*4.5),10px)]"
           onClick={() => (click(), update({ sortMode: settings.sortMode === 'value' ? 'group' : 'value' }))}
           title="Change how your hand is sorted"
         >
-          Sort: {settings.sortMode === 'value' ? '1-10' : 'Group'}
+          Sort: {settings.sortMode === 'value' ? '3→2' : 'Group'}
+        </button>
+        <button className="px-btn btn-ghost !px-2 !text-[max(calc(var(--s)*4.5),10px)]" disabled={!selected.length} onClick={() => (click(), clearSelection())}>
+          Clear
         </button>
       </div>
-      <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-[max(calc(var(--s)*2),6px)]">
-        <button className={`px-btn btn-jual ${target('jual') ? 'tut-target' : ''}`} disabled={!can.jual} onClick={jual}>
-          Jual
-        </button>
-        <button
-          className={`px-btn btn-cilok ${target('cilok') ? 'tut-target' : ''} ${cilokMode && !cilokMode.stamp ? 'armed' : ''}`}
-          data-armed={!!cilokMode && !cilokMode.stamp}
-          disabled={!can.cilok}
-          onClick={() => cilok(false)}
-          title="Snatch an end dish from a rival's Gerai"
-        >
-          {cilokMode && !cilokMode.stamp ? 'Cancel' : 'Cilok!'}
-        </button>
-        <button
-          className={`px-btn btn-stamp ${target('stamp') ? 'tut-target' : ''} ${cilokMode?.stamp ? 'armed' : ''}`}
-          data-armed={!!cilokMode?.stamp}
-          disabled={!can.stamp}
-          onClick={() => cilok(true)}
-          title="Once per round: CILOK then JUAL in the same turn"
-        >
-          {cilokMode?.stamp ? 'Cancel' : me.stampUsed ? 'Stamp used' : 'Cilok & Jual'}
-        </button>
-        <button className={`px-btn btn-plain ${target('pass') ? 'tut-target' : ''}`} disabled={!can.pass} onClick={pass}>
-          Lalu
-        </button>
+      <div className="pointer-events-auto hidden [html[data-layout=portrait]_&]:block">
+        <PlayerStats />
       </div>
-      {!tutorial.active && (
-        <div className="pointer-events-auto hidden [html[data-layout=portrait]_&]:block">
-          <PlayerStats compact />
-        </div>
-      )}
     </div>
   )
 }
@@ -179,7 +160,7 @@ function PauseMenu() {
         <button className="px-btn btn-plain" onClick={() => (click(), setOverlay('settings'))}>
           Settings
         </button>
-        <button className="px-btn btn-cilok" onClick={() => (click(), quitToMenu())}>
+        <button className="px-btn btn-red" onClick={() => (click(), quitToMenu())}>
           Quit to Main Menu
         </button>
       </div>
@@ -187,7 +168,7 @@ function PauseMenu() {
   )
 }
 
-/** Score digits tick up one step at a time, like an arcade tally. */
+/** Score digits tick toward their value one step at a time, like an arcade tally. */
 function Tally({ value, delay, className }: { value: number; delay: number; className?: string }) {
   const [v, setV] = useState(0)
   useEffect(() => {
@@ -199,8 +180,8 @@ function Tally({ value, delay, className }: { value: number; delay: number; clas
         if (n === value) return window.clearInterval(id)
         n += step
         setV(n)
-        audio.play('select')
-      }, 45)
+        if (Math.abs(n) % 2 === 0) audio.play('select')
+      }, Math.max(18, 600 / Math.max(1, Math.abs(value))))
     }, delay)
     return () => {
       window.clearTimeout(start)
@@ -213,7 +194,7 @@ function Tally({ value, delay, className }: { value: number; delay: number; clas
 export function Settlement() {
   const { state, nextRound, quitToMenu, startGame, startTutorial } = useGame()
   if (state.status !== 'roundEnd' && state.status !== 'gameOver') return null
-  const ranked = [...state.players].sort((a, b) => b.total - a.total)
+  const ranked = [...state.players].sort((a, b) => b.duit - a.duit)
   const roundWinner = state.players[state.lastWinner ?? 0]
   const cell = 'px-2 py-1.5 text-center font-pixel text-[max(calc(var(--s)*5),11px)]'
 
@@ -222,15 +203,15 @@ export function Settlement() {
     return (
       <Modal wide>
         <p className="px-label text-center">Pasar dah tutup</p>
-        <h2 className="px-title mt-1 text-center">{champ.isHuman ? 'You are' : `${champ.name} is`} Raja Pasar Malam!</h2>
+        <h2 className="px-title mt-1 text-center">{champ.isHuman ? 'You are' : `${champ.name} is`} Raja Gerai!</h2>
         <ol className="mt-5 space-y-2">
           {ranked.map((p, i) => (
             <li key={p.id} className={`flex items-center gap-3 border-[length:var(--u)] border-[#1A0F14] px-3 py-2 ${i === 0 ? 'bg-[#F4B42A]/40' : 'bg-kopi/5'}`}>
               <span className="font-pixel text-[max(calc(var(--s)*7),15px)] text-kopi/60">{i + 1}</span>
               <span className="inline-block h-3 w-3" style={{ background: PERSONAS[p.persona].accent }} />
               <span className="flex-1 font-pixel text-[max(calc(var(--s)*5.5),12px)] uppercase">{p.isHuman ? 'You' : p.name}</span>
-              <span className="px-text text-kopi/60">{p.roundScores.map((r) => (r.score >= 0 ? `+${r.score}` : r.score)).join(' · ')}</span>
-              <Tally value={p.total} delay={300 + i * 250} className="w-12 text-right font-pixel text-[max(calc(var(--s)*7),15px)]" />
+              <span className="px-text text-kopi/60">{p.roundScores.map((r) => (r.delta >= 0 ? `+${r.delta}` : r.delta)).join(' · ')}</span>
+              <Tally value={p.duit} delay={300 + i * 250} className={`w-14 text-right font-pixel text-[max(calc(var(--s)*7),15px)] ${p.duit < 0 ? 'text-[#C8352B]' : ''}`} />
             </li>
           ))}
         </ol>
@@ -238,10 +219,7 @@ export function Settlement() {
           <button className="px-btn btn-plain flex-1" onClick={() => (click(), quitToMenu())}>
             Main Menu
           </button>
-          <button
-            className="px-btn btn-jual flex-[2]"
-            onClick={() => (click(), startGame({ numPlayers: state.players.length, difficulty: state.difficulty, totalRounds: state.totalRounds }))}
-          >
+          <button className="px-btn btn-jual flex-[2]" onClick={() => (click(), startGame({ difficulty: state.difficulty, totalRounds: state.totalRounds }))}>
             Main Lagi!
           </button>
         </div>
@@ -254,37 +232,36 @@ export function Settlement() {
       <p className="px-label text-center">{state.tutorial ? 'Tutorial complete' : `Pusingan ${state.round} selesai`}</p>
       <h2 className="px-title mt-1 text-center">{roundWinner.isHuman ? 'You cleared your stall!' : `${roundWinner.name} cleared the stall!`}</h2>
       <p className="mx-auto mt-3 w-fit border-[length:var(--u)] border-[#1A0F14] bg-kopi px-3 py-1 text-center font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kertas">
-        Score = <span className="text-[#3CE08A]">Habuan</span> + <span className="text-[#F4B42A]">Duit</span> − <span className="text-[#FF6A5A]">Hand</span>
+        Pay 1 Duit per card · ×2 at 10+ cards · ×3 if never played
       </p>
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[420px] border-collapse">
+        <table className="w-full min-w-[400px] border-collapse">
           <thead>
             <tr className="px-label">
               <th className="px-2 py-1 text-left">Hawker</th>
-              <th>Habuan</th>
+              <th>Cards left</th>
+              <th>×</th>
               <th>Duit</th>
-              <th>Hand</th>
-              <th>Round</th>
               <th>Total</th>
             </tr>
           </thead>
           <tbody>
             {state.players.map((p, i) => {
               const rs = p.roundScores[p.roundScores.length - 1]
-              const d = 200 + i * 400
+              const winner = p.id === state.lastWinner
               return (
-                <tr key={p.id} className={`border-t-[length:var(--u)] border-dashed border-kopi/25 ${p.id === state.lastWinner ? 'bg-[#00A859]/15' : ''}`}>
+                <tr key={p.id} className={`border-t-[length:var(--u)] border-dashed border-kopi/25 ${winner ? 'bg-[#00A859]/15' : ''}`}>
                   <td className="px-2 py-1.5 font-pixel text-[max(calc(var(--s)*5),11px)] uppercase">
                     <span className="mr-2 inline-block h-2.5 w-2.5" style={{ background: PERSONAS[p.persona].accent }} />
                     {p.isHuman ? 'You' : p.name}
                   </td>
-                  <td className={`${cell} text-[#00A859]`}>
-                    +<Tally value={rs.habuan} delay={d} />
+                  <td className={cell}>{rs.cardsLeft}</td>
+                  <td className={`${cell} ${rs.multiplier > 1 ? 'text-[#C8352B]' : 'text-kopi/40'}`}>{winner ? '' : `×${rs.multiplier}`}</td>
+                  <td className={`${cell} ${rs.delta >= 0 ? 'text-[#00A859]' : 'text-[#C8352B]'}`}>
+                    {rs.delta >= 0 ? '+' : ''}
+                    <Tally value={rs.delta} delay={250 + i * 300} />
                   </td>
-                  <td className={`${cell} text-[#B8740E]`}>+{rs.duit}</td>
-                  <td className={`${cell} text-[#C8352B]`}>−{rs.hand}</td>
-                  <td className={cell}>{rs.score >= 0 ? `+${rs.score}` : rs.score}</td>
-                  <td className={cell}>{p.total}</td>
+                  <td className={`${cell} ${p.duit < 0 ? 'text-[#C8352B]' : ''}`}>{p.duit}</td>
                 </tr>
               )
             })}
@@ -294,7 +271,7 @@ export function Settlement() {
       {state.tutorial ? (
         <>
           <p className="px-text mt-4 text-center text-kopi/80">
-            Every Habuan card and DUIT coin is +1, every dish stuck in your hand is −1. A full game runs several rounds and the highest total wins.
+            Abang Mat was stuck with 10 cards, so he paid double. A full game runs several rounds, and the most DUIT at the end is crowned Raja Gerai.
           </p>
           <div className="mt-5 flex gap-3">
             <button className="px-btn btn-plain flex-1" onClick={() => (click(), startTutorial())}>
@@ -319,7 +296,8 @@ export function TutorialPanel() {
   if (!tutorial.active || !tutorial.step || state.status !== 'playing') return null
   const { step, index, total } = tutorial
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[max(calc(var(--s)*16),40px)] z-30 flex justify-center px-2 [html[data-layout=landscape]_&]:right-auto [html[data-layout=landscape]_&]:left-[max(calc(var(--s)*3),6px)] [html[data-layout=landscape]_&]:w-[max(calc(var(--s)*150),300px)] [html[data-layout=landscape]_&]:px-0">
+    // Landscape: beside the alas meja, clear of the hawkers' panels. Portrait: under the top bar.
+    <div className="pointer-events-none fixed inset-x-0 top-[max(calc(var(--s)*16),40px)] z-30 flex justify-center px-2 [html[data-layout=landscape]_&]:right-auto [html[data-layout=landscape]_&]:left-[max(calc(var(--s)*3),6px)] [html[data-layout=landscape]_&]:top-[calc(var(--table-top)+var(--s)*20)] [html[data-layout=landscape]_&]:w-[max(calc(var(--s)*128),270px)] [html[data-layout=landscape]_&]:px-0">
       <div key={index} className="px-panel pop-in pointer-events-auto w-full max-w-[460px] p-[max(calc(var(--s)*4),10px)]">
         <div className="flex items-center justify-between">
           <span className="px-label">
@@ -343,7 +321,7 @@ export function TutorialPanel() {
             </button>
           )}
           {step.kind === 'do' && <span className="blink font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-[#00A859]">► Your move</span>}
-          {step.kind === 'ai' && <span className="blink font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kopi/60">Watch Uncle…</span>}
+          {step.kind === 'ai' && <span className="blink font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kopi/60">Watch the table…</span>}
         </div>
       </div>
     </div>
@@ -351,31 +329,23 @@ export function TutorialPanel() {
 }
 
 export function GameHUD() {
-  const { overlay, setOverlay, jual, cilok, cilokMode, cancelCilok, chooseEnd, pass, state, tutorial } = useGame()
+  const { overlay, setOverlay, jual, pass, clearSelection, state, tutorial } = useGame()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (cilokMode) {
-          cancelCilok()
-          audio.play('cancel')
-        } else setOverlay(overlay === 'none' ? 'pause' : 'none')
+        setOverlay(overlay === 'none' ? 'pause' : 'none')
         return
       }
       if (overlay !== 'none' || state.status !== 'playing') return
-      if (cilokMode && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        chooseEnd(e.key === 'ArrowLeft' ? 'low' : 'high')
-        return
-      }
       if (tutorial.active && tutorial.step?.kind === 'info' && (e.key === 'Enter' || e.key === ' ')) {
         tutorial.next()
         return
       }
       const k = e.key.toLowerCase()
       if (k === 'j') jual()
-      else if (k === 'c') cilok(false)
-      else if (k === 's') cilok(true)
       else if (k === 'l' || k === 'p') pass()
+      else if (k === 'x') clearSelection()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
