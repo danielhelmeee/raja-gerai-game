@@ -1,6 +1,6 @@
 import { ALL_CARDS, CARD_BY_ID, GROUPS, HAND_SIZE, shuffle, sortCards } from './cards'
 import { OPPONENT_ORDER, PERSONAS } from './personas'
-import { checkJual, cilokResult, isQuad } from './rules'
+import { checkJual, cilokResult } from './rules'
 import { TUTORIAL_HANDS } from './tutorial'
 import type { Card, GameAction, GameConfig, GameState, Gerai, NewGameEvent, Player, RoundScore } from './types'
 
@@ -11,7 +11,6 @@ export const initialState: GameState = {
   status: 'idle',
   players: [],
   gerai: EMPTY_GERAI,
-  pusing: false,
   turn: 0,
   subPhase: 'normal',
   round: 0,
@@ -81,7 +80,6 @@ function deal(state: GameState, round: number): GameState {
     status: 'playing',
     players,
     gerai: EMPTY_GERAI,
-    pusing: false,
     turn: starter,
     starter,
     subPhase: 'normal',
@@ -126,7 +124,7 @@ function isTurnOf(state: GameState, playerId: number) {
 
 export function canCilok(state: GameState, playerId: number, stamp: boolean): boolean {
   if (!isTurnOf(state, playerId) || state.subPhase !== 'normal') return false
-  if (state.gerai.ownerId === playerId || !cilokResult(state.gerai)) return false
+  if (state.gerai.ownerId === playerId || !cilokResult(state.gerai, 'high')) return false
   return !stamp || !state.players[playerId].stampUsed
 }
 
@@ -154,13 +152,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const player = state.players[action.playerId]
       const cards = action.cardIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean) as Card[]
       if (cards.length !== action.cardIds.length) return state
-      const check = checkJual(cards, state.gerai, state.pusing)
+      const check = checkJual(cards, state.gerai)
       if (!check.ok || !check.shape) return state
 
       const ids = new Set(action.cardIds)
       const hand = player.hand.filter((c) => !ids.has(c.id))
-      const flips = isQuad(check.shape)
-      const pusing = flips ? !state.pusing : state.pusing
       const gerai: Gerai = {
         cards: sortCards(cards),
         pile: [...state.gerai.pile, ...state.gerai.cards],
@@ -171,7 +167,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         players: updatePlayer(state.players, action.playerId, (p) => ({ ...p, hand })),
         gerai,
-        pusing,
       }
       s = pushEvent(s, {
         type: 'jual',
@@ -179,7 +174,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         cards: gerai.cards,
         shape: check.shape,
         beat: state.gerai.ownerId,
-        pusing: flips ? pusing : null,
       })
 
       if (hand.length === 0) {
@@ -197,7 +191,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'CILOK': {
       if (!canCilok(state, action.playerId, action.stamp)) return state
-      const result = cilokResult(state.gerai)!
+      const result = cilokResult(state.gerai, action.end)!
       const target = state.gerai.ownerId!
       let players = updatePlayer(state.players, action.playerId, (p) => ({
         ...p,
@@ -210,7 +204,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         players,
         gerai: { ...state.gerai, cards: result.remaining, shape: result.shape },
       }
-      s = pushEvent(s, { type: 'cilok', actor: action.playerId, target, card: result.card, stamp: action.stamp })
+      s = pushEvent(s, { type: 'cilok', actor: action.playerId, target, card: result.card, end: action.end, stamp: action.stamp })
       return action.stamp ? { ...s, subPhase: 'afterCilok' } : advanceTurn(s)
     }
 

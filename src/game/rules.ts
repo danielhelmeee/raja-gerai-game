@@ -1,5 +1,5 @@
 import { sortCards } from './cards'
-import type { Card, Gerai, Shape } from './types'
+import type { Card, End, Gerai, Shape } from './types'
 
 export function classify(cards: Card[]): Shape | null {
   if (cards.length === 0) return null
@@ -13,15 +13,12 @@ export function classify(cards: Card[]): Shape | null {
   return null
 }
 
-export const isQuad = (s: Shape | null) => !!s && s.kind === 'set' && s.count === 4
-
 /** Two-card runs only exist as leftovers after a CILOK, so you can't open with one. */
 export const isLegalLead = (s: Shape) => !(s.kind === 'run' && s.count < 3)
 
-export function beats(play: Shape, gerai: Shape, pusing: boolean): boolean {
-  if (isQuad(play) && !isQuad(gerai)) return true
-  if (play.kind !== gerai.kind || play.count !== gerai.count) return false
-  return pusing ? play.rank < gerai.rank : play.rank > gerai.rank
+/** Same shape, higher number. Four of a kind is just a bigger set. */
+export function beats(play: Shape, gerai: Shape): boolean {
+  return play.kind === gerai.kind && play.count === gerai.count && play.rank > gerai.rank
 }
 
 export function shapeName(s: Shape, cards?: Card[]): string {
@@ -47,7 +44,7 @@ export interface JualCheck {
   reason: string
 }
 
-export function checkJual(cards: Card[], gerai: Gerai, pusing: boolean): JualCheck {
+export function checkJual(cards: Card[], gerai: Gerai): JualCheck {
   const shape = classify(cards)
   if (!shape) {
     return { ok: false, shape, reason: cards.length ? 'Not a valid set: use same numbers or a run' : 'Pick dishes to sell' }
@@ -56,23 +53,23 @@ export function checkJual(cards: Card[], gerai: Gerai, pusing: boolean): JualChe
     if (!isLegalLead(shape)) return { ok: false, shape, reason: 'Runs need at least 3 dishes' }
     return { ok: true, shape, reason: `Open the Gerai with ${shapeName(shape, cards)}` }
   }
-  if (beats(shape, gerai.shape, pusing)) {
+  if (beats(shape, gerai.shape)) {
     return { ok: true, shape, reason: `${capitalise(shapeName(shape, cards))} beats the Gerai` }
   }
   if (shape.kind !== gerai.shape.kind || shape.count !== gerai.shape.count) {
     return { ok: false, shape, reason: `Must match the Gerai: ${shapeName(gerai.shape, gerai.cards)}` }
   }
-  return { ok: false, shape, reason: pusing ? 'PUSING is on: you need a LOWER number' : 'Too low: you need a higher number' }
+  return { ok: false, shape, reason: 'Too low: you need a higher number' }
 }
 
 export const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-/** What a CILOK would take from this Gerai, and what would be left. */
-export function cilokResult(gerai: Gerai): { card: Card; remaining: Card[]; shape: Shape } | null {
+/** The dish at either end of the Gerai: what a CILOK from that end would take, and what would be left. */
+export function cilokResult(gerai: Gerai, end: End): { card: Card; remaining: Card[]; shape: Shape } | null {
   if (gerai.cards.length < 2) return null
   const sorted = sortCards(gerai.cards)
-  const card = sorted[sorted.length - 1]
-  const remaining = sorted.slice(0, -1)
+  const card = end === 'low' ? sorted[0] : sorted[sorted.length - 1]
+  const remaining = end === 'low' ? sorted.slice(1) : sorted.slice(0, -1)
   const shape = classify(remaining)
   return shape ? { card, remaining, shape } : null
 }
@@ -105,8 +102,6 @@ export function enumeratePlays(hand: Card[]): Play[] {
   return plays
 }
 
-export function legalPlays(hand: Card[], gerai: Gerai, pusing: boolean): Play[] {
-  return enumeratePlays(hand).filter((p) =>
-    gerai.shape ? beats(p.shape, gerai.shape, pusing) : isLegalLead(p.shape),
-  )
+export function legalPlays(hand: Card[], gerai: Gerai): Play[] {
+  return enumeratePlays(hand).filter((p) => (gerai.shape ? beats(p.shape, gerai.shape) : isLegalLead(p.shape)))
 }

@@ -16,6 +16,9 @@ export interface Shape {
   rank: number
 }
 
+/** Which end of the Gerai a CILOK takes: the lowest or the highest dish. */
+export type End = 'low' | 'high'
+
 export type Difficulty = 'easy' | 'standard' | 'hard'
 export type PersonaId = 'you' | 'ahseng' | 'lina' | 'mat'
 
@@ -50,8 +53,8 @@ export interface Gerai {
 
 export type GameEvent =
   | { seq: number; type: 'deal'; round: number; starter: number }
-  | { seq: number; type: 'jual'; actor: number; cards: Card[]; shape: Shape; beat: number | null; pusing: boolean | null }
-  | { seq: number; type: 'cilok'; actor: number; target: number; card: Card; stamp: boolean }
+  | { seq: number; type: 'jual'; actor: number; cards: Card[]; shape: Shape; beat: number | null }
+  | { seq: number; type: 'cilok'; actor: number; target: number; card: Card; end: End; stamp: boolean }
   | { seq: number; type: 'pass'; actor: number }
   | { seq: number; type: 'collect'; actor: number; count: number }
   | { seq: number; type: 'roundEnd'; winner: number }
@@ -66,7 +69,6 @@ export interface GameState {
   status: Status
   players: Player[]
   gerai: Gerai
-  pusing: boolean
   turn: number
   /** After a CILOK & JUAL steal, the same player may still JUAL (or LALU). */
   subPhase: 'normal' | 'afterCilok'
@@ -90,7 +92,7 @@ export interface GameConfig {
 export type GameAction =
   | { type: 'NEW_GAME'; config: GameConfig }
   | { type: 'JUAL'; playerId: number; cardIds: string[] }
-  | { type: 'CILOK'; playerId: number; stamp: boolean }
+  | { type: 'CILOK'; playerId: number; stamp: boolean; end: End }
   | { type: 'PASS'; playerId: number }
   | { type: 'NEXT_ROUND' }
   | { type: 'RESET' }

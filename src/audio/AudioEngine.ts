@@ -1,20 +1,23 @@
 /**
- * Everything is synthesised with the Web Audio API: no sample files.
- * Buses: music, ambience (crowd + wok sizzle) and sfx, all into a master gain.
+ * 16-bit console-style audio, synthesised live with the Web Audio API.
+ * Pulse waves (12.5/25/50% duty), a stepped triangle bass and LFSR noise run
+ * through a light bit-crush, a muffling low-pass and a SNES-style echo.
  */
 export type Sfx =
-  | 'slide'
   | 'select'
+  | 'ui'
+  | 'arm'
+  | 'cancel'
+  | 'error'
+  | 'deal'
   | 'jual'
   | 'cilok'
   | 'coin'
   | 'pass'
   | 'collect'
-  | 'ui'
+  | 'turn'
   | 'gong'
-  | 'bell'
-  | 'pusing'
-  | 'error'
+  | 'fanfare'
 
 export interface Mix {
   master: number
@@ -25,19 +28,36 @@ export interface Mix {
   sfxOn: boolean
 }
 
-// F major kroncong-style progressions, one chord per bar.
+type Voice = 'p12' | 'p25' | 'p50' | 'tri'
+
+const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12)
+
 const CHORDS: Record<string, number[]> = {
   F: [53, 57, 60],
-  F7: [53, 57, 60, 63],
-  Bb: [58, 62, 65],
   C7: [48, 52, 55, 58],
-  Dm: [50, 53, 57],
-  Gm: [55, 58, 62],
-  A7: [57, 61, 64, 67],
+  F7: [53, 57, 60, 63],
+  Bb: [46, 50, 53],
 }
-const PROGRESSION = ['F', 'F', 'C7', 'C7', 'F', 'Bb', 'C7', 'F', 'F', 'Dm', 'Gm', 'C7', 'F', 'F7', 'Bb', 'C7', 'A7', 'Dm', 'Gm', 'C7']
-const SCALE = [0, 2, 4, 5, 7, 9, 10, 12, 14, 16, 17]
-const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12)
+const BARS = ['F', 'F', 'C7', 'C7', 'C7', 'C7', 'F', 'F', 'F7', 'F7', 'Bb', 'Bb', 'F', 'C7', 'F', 'C7']
+/** A kroncong-flavoured tune: [midi or rest, length in eighths] per bar. */
+const MELODY: [number | null, number][][] = [
+  [[72, 3], [69, 1], [65, 2], [67, 2]],
+  [[69, 4], [null, 2], [72, 1], [74, 1]],
+  [[76, 3], [74, 1], [72, 2], [70, 2]],
+  [[67, 6], [null, 2]],
+  [[70, 3], [69, 1], [67, 2], [64, 2]],
+  [[67, 2], [70, 2], [74, 2], [72, 2]],
+  [[69, 6], [67, 1], [69, 1]],
+  [[65, 6], [null, 2]],
+  [[72, 2], [75, 2], [74, 2], [72, 2]],
+  [[69, 4], [72, 2], [69, 2]],
+  [[70, 3], [74, 1], [77, 2], [74, 2]],
+  [[70, 6], [null, 2]],
+  [[69, 3], [72, 1], [77, 2], [76, 2]],
+  [[74, 2], [72, 2], [70, 2], [67, 2]],
+  [[69, 4], [67, 2], [64, 2]],
+  [[65, 4], [67, 2], [72, 2]],
+]
 
 export class AudioEngine {
   private ctx: AudioContext | null = null
@@ -45,18 +65,16 @@ export class AudioEngine {
   private musicBus!: GainNode
   private sfxBus!: GainNode
   private ambBus!: GainNode
-  private noise!: AudioBuffer
-  private brown!: AudioBuffer
-  private reverb!: ConvolverNode
-  private reverbSend!: GainNode
+  private echoIn!: GainNode
+  private waves = new Map<Voice, PeriodicWave>()
+  private white!: AudioBuffer
+  private metal!: AudioBuffer
   private mix: Mix = { master: 0.8, music: 0.5, sfx: 0.8, ambience: 0.45, musicOn: true, sfxOn: true }
-
   private schedulerId: number | null = null
-  private nextStepTime = 0
+  private nextStep = 0
   private step = 0
-  private melodyNote = 7
-  private ambienceNodes: AudioNode[] = []
-  private chatterId: number | null = null
+  private tempo = 108
+  private ambId: number | null = null
 
   get ready() {
     return !!this.ctx
@@ -69,27 +87,96 @@ export class AudioEngine {
       if (!Ctor) return
       const ctx = new Ctor()
       this.ctx = ctx
-      this.master = ctx.createGain()
-      this.master.connect(ctx.destination)
-      this.musicBus = ctx.createGain()
-      this.sfxBus = ctx.createGain()
-      this.ambBus = ctx.createGain()
-      this.musicBus.connect(this.master)
-      this.sfxBus.connect(this.master)
-      this.ambBus.connect(this.master)
-      this.noise = this.makeNoise(false)
-      this.brown = this.makeNoise(true)
-      this.reverb = ctx.createConvolver()
-      this.reverb.buffer = this.makeImpulse(1.8)
-      this.reverbSend = ctx.createGain()
-      this.reverbSend.gain.value = 0.22
-      this.reverbSend.connect(this.reverb)
-      this.reverb.connect(this.master)
+      this.build(ctx)
       this.applyMix()
       this.startAmbience()
       if (this.mix.musicOn) this.startMusic()
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume()
+  }
+
+  private build(ctx: AudioContext) {
+    // Output chain: crush → console low-pass → master.
+    this.master = ctx.createGain()
+    const crush = ctx.createWaveShaper()
+    const curve = new Float32Array(4096)
+    const levels = 96
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * 2 - 1
+      curve[i] = Math.round(x * levels) / levels
+    }
+    crush.curve = curve
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 9500
+    lp.Q.value = 0.4
+    crush.connect(lp)
+    lp.connect(this.master)
+    this.master.connect(ctx.destination)
+
+    this.musicBus = ctx.createGain()
+    this.sfxBus = ctx.createGain()
+    this.ambBus = ctx.createGain()
+    for (const b of [this.musicBus, this.sfxBus, this.ambBus]) b.connect(crush)
+
+    // SNES-style echo: a feedback delay with a dark filter in the loop.
+    this.echoIn = ctx.createGain()
+    const delay = ctx.createDelay(1)
+    delay.delayTime.value = 0.27
+    const fb = ctx.createGain()
+    fb.gain.value = 0.38
+    const dark = ctx.createBiquadFilter()
+    dark.type = 'lowpass'
+    dark.frequency.value = 2600
+    const wet = ctx.createGain()
+    wet.gain.value = 0.3
+    this.echoIn.connect(delay)
+    delay.connect(dark)
+    dark.connect(fb)
+    fb.connect(delay)
+    dark.connect(wet)
+    wet.connect(crush)
+
+    for (const [name, duty] of [
+      ['p12', 0.125],
+      ['p25', 0.25],
+      ['p50', 0.5],
+    ] as const) {
+      const n = 48
+      const real = new Float32Array(n)
+      const imag = new Float32Array(n)
+      for (let k = 1; k < n; k++) real[k] = (2 * Math.sin(Math.PI * k * duty)) / (Math.PI * k)
+      this.waves.set(name, ctx.createPeriodicWave(real, imag))
+    }
+    {
+      const n = 32
+      const real = new Float32Array(n)
+      const imag = new Float32Array(n)
+      for (let k = 1; k < n; k += 2) imag[k] = ((8 / (Math.PI * Math.PI)) * (((k - 1) / 2) % 2 ? -1 : 1)) / (k * k)
+      this.waves.set('tri', ctx.createPeriodicWave(real, imag))
+    }
+    this.white = this.lfsr(false)
+    this.metal = this.lfsr(true)
+  }
+
+  /** NES/SNES-style LFSR noise; short mode gives the metallic tone. */
+  private lfsr(short: boolean): AudioBuffer {
+    const ctx = this.ctx!
+    const len = ctx.sampleRate
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate)
+    const d = buf.getChannelData(0)
+    let reg = 1
+    let out = 0
+    const period = Math.floor(ctx.sampleRate / 16000)
+    for (let i = 0; i < len; i++) {
+      if (i % period === 0) {
+        const bit = (reg ^ (reg >> (short ? 6 : 1))) & 1
+        reg = (reg >> 1) | (bit << 14)
+        out = reg & 1 ? 1 : -1
+      }
+      d[i] = out * 0.6
+    }
+    return buf
   }
 
   setMix(mix: Mix) {
@@ -101,110 +188,118 @@ export class AudioEngine {
     if (!mix.musicOn && wasOn) this.stopMusic()
   }
 
+  /** Faster, brighter music for the deciding round. */
+  setFinalRound(final: boolean) {
+    this.tempo = final ? 126 : 108
+  }
+
   private applyMix() {
     if (!this.ctx) return
     const t = this.ctx.currentTime
-    this.master.gain.setTargetAtTime(this.mix.master, t, 0.05)
-    this.musicBus.gain.setTargetAtTime(this.mix.musicOn ? this.mix.music * 0.55 : 0, t, 0.2)
-    this.sfxBus.gain.setTargetAtTime(this.mix.sfxOn ? this.mix.sfx : 0, t, 0.05)
-    this.ambBus.gain.setTargetAtTime(this.mix.ambience * 0.6, t, 0.3)
-  }
-
-  private makeNoise(brown: boolean): AudioBuffer {
-    const ctx = this.ctx!
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate)
-    const d = buf.getChannelData(0)
-    let last = 0
-    for (let i = 0; i < d.length; i++) {
-      const w = Math.random() * 2 - 1
-      if (brown) {
-        last = (last + 0.02 * w) / 1.02
-        d[i] = last * 3.5
-      } else d[i] = w
-    }
-    return buf
-  }
-
-  private makeImpulse(seconds: number): AudioBuffer {
-    const ctx = this.ctx!
-    const len = ctx.sampleRate * seconds
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate)
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch)
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3)
-    }
-    return buf
+    this.master.gain.setTargetAtTime(this.mix.master * 0.9, t, 0.05)
+    this.musicBus.gain.setTargetAtTime(this.mix.musicOn ? this.mix.music * 0.5 : 0, t, 0.2)
+    this.sfxBus.gain.setTargetAtTime(this.mix.sfxOn ? this.mix.sfx * 0.7 : 0, t, 0.05)
+    this.ambBus.gain.setTargetAtTime(this.mix.ambience * 0.5, t, 0.3)
   }
 
   // ───────────────────────── building blocks ─────────────────────────
 
-  private env(g: GainNode, t: number, peak: number, attack: number, decay: number) {
-    g.gain.setValueAtTime(0.0001, t)
-    g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + attack)
-    g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay)
-  }
-
-  private tone(
+  /** One chip note with a stepped (NES/SNES-ish) volume envelope. */
+  private note(
     out: AudioNode,
     t: number,
+    voice: Voice,
     freq: number,
-    opts: { type?: OscillatorType; peak?: number; attack?: number; decay?: number; glideTo?: number; send?: boolean } = {},
+    len: number,
+    opts: { vol?: number; slideTo?: number; slideTime?: number; vibrato?: number; echo?: number; decay?: boolean } = {},
   ) {
     const ctx = this.ctx!
     const o = ctx.createOscillator()
-    const g = ctx.createGain()
-    o.type = opts.type ?? 'sine'
+    o.setPeriodicWave(this.waves.get(voice)!)
     o.frequency.setValueAtTime(freq, t)
-    if (opts.glideTo) o.frequency.exponentialRampToValueAtTime(opts.glideTo, t + (opts.decay ?? 0.2))
-    const attack = opts.attack ?? 0.004
-    const decay = opts.decay ?? 0.2
-    this.env(g, t, opts.peak ?? 0.3, attack, decay)
+    if (opts.slideTo) o.frequency.exponentialRampToValueAtTime(opts.slideTo, t + (opts.slideTime ?? len))
+    if (opts.vibrato) {
+      const lfo = ctx.createOscillator()
+      lfo.frequency.value = 5.5
+      const depth = ctx.createGain()
+      depth.gain.setValueAtTime(0, t)
+      depth.gain.setValueAtTime(0, t + 0.15)
+      depth.gain.linearRampToValueAtTime(freq * opts.vibrato, t + 0.35)
+      lfo.connect(depth)
+      depth.connect(o.frequency)
+      lfo.start(t)
+      lfo.stop(t + len + 0.05)
+    }
+    const g = ctx.createGain()
+    const vol = opts.vol ?? 0.2
+    g.gain.setValueAtTime(vol, t)
+    if (opts.decay !== false) {
+      // Stepped decay, like a hardware envelope.
+      const steps = 6
+      for (let i = 1; i <= steps; i++) g.gain.setValueAtTime(vol * Math.pow(1 - i / steps, 1.3), t + (len * i) / steps)
+    } else {
+      g.gain.setValueAtTime(vol, t + len * 0.85)
+      g.gain.linearRampToValueAtTime(0, t + len)
+    }
     o.connect(g)
     g.connect(out)
-    if (opts.send) g.connect(this.reverbSend)
+    if (opts.echo) {
+      const e = ctx.createGain()
+      e.gain.value = opts.echo
+      g.connect(e)
+      e.connect(this.echoIn)
+    }
     o.start(t)
-    o.stop(t + attack + decay + 0.05)
+    o.stop(t + len + 0.02)
   }
 
-  private noiseBurst(
+  private noise(
     out: AudioNode,
     t: number,
-    opts: { type?: BiquadFilterType; freq?: number; freqTo?: number; q?: number; peak?: number; attack?: number; decay?: number; brown?: boolean; send?: boolean },
+    len: number,
+    opts: { vol?: number; metal?: boolean; rate?: number; rateTo?: number; hp?: number; lp?: number; echo?: number } = {},
   ) {
     const ctx = this.ctx!
     const src = ctx.createBufferSource()
-    src.buffer = opts.brown ? this.brown : this.noise
-    const f = ctx.createBiquadFilter()
-    f.type = opts.type ?? 'bandpass'
-    f.frequency.setValueAtTime(opts.freq ?? 2000, t)
-    if (opts.freqTo) f.frequency.exponentialRampToValueAtTime(opts.freqTo, t + (opts.decay ?? 0.1))
-    f.Q.value = opts.q ?? 1
-    const g = ctx.createGain()
-    const attack = opts.attack ?? 0.003
-    const decay = opts.decay ?? 0.1
-    this.env(g, t, opts.peak ?? 0.3, attack, decay)
-    src.connect(f)
-    f.connect(g)
-    g.connect(out)
-    if (opts.send) g.connect(this.reverbSend)
-    src.start(t, Math.random() * 2)
-    src.stop(t + attack + decay + 0.05)
-  }
-
-  private metalHit(t: number, base: number, peak: number, decay: number) {
-    for (const [ratio, amp] of [
-      [1, 1],
-      [2.76, 0.6],
-      [5.4, 0.35],
-      [8.93, 0.2],
-    ]) {
-      this.tone(this.sfxBus, t, base * ratio, { peak: peak * amp, decay: decay / ratio ** 0.3, send: true })
+    src.buffer = opts.metal ? this.metal : this.white
+    src.loop = true
+    src.playbackRate.setValueAtTime(opts.rate ?? 1, t)
+    if (opts.rateTo) src.playbackRate.exponentialRampToValueAtTime(opts.rateTo, t + len)
+    let node: AudioNode = src
+    if (opts.hp) {
+      const f = ctx.createBiquadFilter()
+      f.type = 'highpass'
+      f.frequency.value = opts.hp
+      node.connect(f)
+      node = f
     }
+    if (opts.lp) {
+      const f = ctx.createBiquadFilter()
+      f.type = 'lowpass'
+      f.frequency.value = opts.lp
+      node.connect(f)
+      node = f
+    }
+    const g = ctx.createGain()
+    const vol = opts.vol ?? 0.15
+    g.gain.setValueAtTime(vol, t)
+    g.gain.setValueAtTime(vol * 0.6, t + len * 0.4)
+    g.gain.setValueAtTime(vol * 0.25, t + len * 0.75)
+    g.gain.linearRampToValueAtTime(0, t + len)
+    node.connect(g)
+    g.connect(out)
+    if (opts.echo) {
+      const e = ctx.createGain()
+      e.gain.value = opts.echo
+      g.connect(e)
+      e.connect(this.echoIn)
+    }
+    src.start(t, Math.random() * 0.5)
+    src.stop(t + len + 0.02)
   }
 
-  private thud(t: number, peak = 0.5) {
-    this.tone(this.sfxBus, t, 150, { glideTo: 55, peak, decay: 0.14 })
-    this.noiseBurst(this.sfxBus, t, { type: 'lowpass', freq: 900, peak: peak * 0.5, decay: 0.06 })
+  private arp(t: number, midis: number[], gap: number, voice: Voice, len: number, vol: number, echo = 0.3) {
+    midis.forEach((m, i) => this.note(this.sfxBus, t + i * gap, voice, mtof(m), len, { vol, echo }))
   }
 
   // ───────────────────────── sound effects ─────────────────────────
@@ -212,85 +307,108 @@ export class AudioEngine {
   play(name: Sfx, delay = 0) {
     if (!this.ctx || !this.mix.sfxOn) return
     const t = this.ctx.currentTime + delay + 0.01
+    const out = this.sfxBus
     switch (name) {
-      case 'slide':
-        this.noiseBurst(this.sfxBus, t, { freq: 3200, freqTo: 900, q: 0.8, peak: 0.22, attack: 0.02, decay: 0.13 })
-        this.thud(t + 0.1, 0.32)
-        break
       case 'select':
-        this.noiseBurst(this.sfxBus, t, { type: 'highpass', freq: 2500, peak: 0.12, decay: 0.04 })
-        this.tone(this.sfxBus, t, 1400, { peak: 0.05, decay: 0.05 })
-        break
-      case 'jual': {
-        this.thud(t, 0.75)
-        this.noiseBurst(this.sfxBus, t, { type: 'highpass', freq: 3000, peak: 0.25, decay: 0.25, send: true })
-        for (let i = 0; i < 6; i++) this.metalHit(t + 0.02 + Math.random() * 0.22, 700 + Math.random() * 900, 0.09, 0.35)
-        break
-      }
-      case 'cilok':
-        this.noiseBurst(this.sfxBus, t, { freq: 700, freqTo: 4500, q: 1.4, peak: 0.25, attack: 0.04, decay: 0.16 })
-        this.metalHit(t + 0.14, 2350, 0.16, 0.45)
-        this.metalHit(t + 0.2, 3100, 0.1, 0.35)
-        break
-      case 'coin': {
-        const bounces = [0, 0.16, 0.28, 0.36, 0.42, 0.46]
-        bounces.forEach((b, i) => this.metalHit(t + b, 2900 + Math.random() * 300, 0.14 * (1 - i / 7), 0.25))
-        break
-      }
-      case 'pass':
-        this.tone(this.sfxBus, t, 220, { glideTo: 140, peak: 0.25, decay: 0.12 })
-        this.tone(this.sfxBus, t + 0.12, 200, { glideTo: 120, peak: 0.18, decay: 0.12 })
-        break
-      case 'collect':
-        for (let i = 0; i < 4; i++) {
-          this.noiseBurst(this.sfxBus, t + i * 0.07, { freq: 2600, freqTo: 1100, peak: 0.13, attack: 0.01, decay: 0.08 })
-        }
-        this.metalHit(t + 0.3, 1650, 0.12, 0.6)
+        this.note(out, t, 'p25', 1320, 0.05, { vol: 0.12, slideTo: 1760, slideTime: 0.03 })
         break
       case 'ui':
-        this.tone(this.sfxBus, t, 1046, { peak: 0.2, decay: 0.09 })
-        this.tone(this.sfxBus, t, 2093, { peak: 0.06, decay: 0.05 })
-        this.noiseBurst(this.sfxBus, t, { freq: 1800, q: 4, peak: 0.12, decay: 0.03 })
+        this.note(out, t, 'p50', mtof(88), 0.05, { vol: 0.12 })
+        this.note(out, t + 0.05, 'p50', mtof(95), 0.09, { vol: 0.12 })
         break
-      case 'gong':
-        for (const [f, a] of [
-          [98, 0.5],
-          [99.5, 0.3],
-          [196.7, 0.22],
-          [293, 0.14],
-          [415, 0.1],
-          [560, 0.06],
-        ]) {
-          this.tone(this.sfxBus, t, f, { peak: a, attack: 0.01, decay: 3.6, glideTo: f * 0.985, send: true })
-        }
-        this.noiseBurst(this.sfxBus, t, { type: 'lowpass', freq: 600, peak: 0.3, decay: 0.15 })
+      case 'arm':
+        this.arp(t, [79, 83, 86], 0.035, 'p12', 0.06, 0.13, 0)
         break
-      case 'bell':
-        for (const [r, a] of [
-          [1, 0.3],
-          [2, 0.14],
-          [2.76, 0.12],
-          [5.4, 0.06],
-        ]) {
-          this.tone(this.sfxBus, t, 880 * r, { peak: a, decay: 1.6, send: true })
-        }
-        break
-      case 'pusing':
-        this.noiseBurst(this.sfxBus, t, { freq: 400, freqTo: 3000, q: 2, peak: 0.25, attack: 0.15, decay: 0.3 })
-        this.tone(this.sfxBus, t, 330, { glideTo: 660, type: 'triangle', peak: 0.12, attack: 0.05, decay: 0.4, send: true })
-        this.play('bell', 0.35 + delay)
+      case 'cancel':
+        this.arp(t, [86, 79], 0.05, 'p12', 0.06, 0.1, 0)
         break
       case 'error':
-        this.tone(this.sfxBus, t, 160, { type: 'square', peak: 0.06, decay: 0.12 })
+        this.note(out, t, 'p50', 130, 0.14, { vol: 0.14, slideTo: 90 })
         break
+      case 'deal':
+        for (let i = 0; i < 12; i++) this.noise(out, t + i * 0.055, 0.03, { vol: 0.1, hp: 3000, rate: 1.4 })
+        this.note(out, t + 0.7, 'p50', mtof(84), 0.08, { vol: 0.1 })
+        this.note(out, t + 0.78, 'p50', mtof(91), 0.16, { vol: 0.1, echo: 0.3 })
+        break
+      case 'jual':
+        this.noise(out, t, 0.14, { vol: 0.22, lp: 2200, rate: 0.7 })
+        this.note(out, t, 'tri', 180, 0.14, { vol: 0.4, slideTo: 45 })
+        this.arp(t + 0.06, [72, 76, 79, 84], 0.04, 'p50', 0.07, 0.11)
+        break
+      case 'cilok':
+        this.note(out, t, 'p12', 300, 0.16, { vol: 0.13, slideTo: 2200 })
+        this.noise(out, t, 0.16, { vol: 0.08, rate: 0.5, rateTo: 2, hp: 1200 })
+        this.note(out, t + 0.17, 'p25', mtof(93), 0.05, { vol: 0.1 })
+        this.noise(out, t + 0.17, 0.05, { vol: 0.08, metal: true, rate: 2 })
+        break
+      case 'coin':
+        this.note(out, t, 'p50', mtof(83), 0.07, { vol: 0.13, decay: false })
+        this.note(out, t + 0.07, 'p50', mtof(88), 0.38, { vol: 0.13, echo: 0.35 })
+        break
+      case 'pass':
+        this.note(out, t, 'p25', mtof(79), 0.08, { vol: 0.09 })
+        this.note(out, t + 0.09, 'p25', mtof(74), 0.14, { vol: 0.08 })
+        break
+      case 'collect':
+        this.arp(t, [72, 74, 77, 79, 81, 84, 86], 0.035, 'p25', 0.06, 0.09)
+        this.noise(out, t + 0.25, 0.12, { vol: 0.05, metal: true, rate: 3, echo: 0.3 })
+        break
+      case 'turn':
+        this.note(out, t, 'tri', mtof(84), 0.14, { vol: 0.2 })
+        this.note(out, t + 0.12, 'tri', mtof(91), 0.3, { vol: 0.18, echo: 0.4 })
+        break
+      case 'gong': {
+        // FM gong: a sine carrier wobbled by an inharmonic modulator.
+        const ctx = this.ctx
+        const car = ctx.createOscillator()
+        const mod = ctx.createOscillator()
+        const idx = ctx.createGain()
+        car.frequency.value = 98
+        mod.frequency.value = 98 * 1.41
+        idx.gain.setValueAtTime(240, t)
+        idx.gain.exponentialRampToValueAtTime(8, t + 2.6)
+        mod.connect(idx)
+        idx.connect(car.frequency)
+        const g = ctx.createGain()
+        g.gain.setValueAtTime(0.32, t)
+        g.gain.exponentialRampToValueAtTime(0.001, t + 3.2)
+        car.connect(g)
+        g.connect(out)
+        g.connect(this.echoIn)
+        car.start(t)
+        mod.start(t)
+        car.stop(t + 3.3)
+        mod.stop(t + 3.3)
+        this.noise(out, t, 0.12, { vol: 0.15, lp: 900 })
+        break
+      }
+      case 'fanfare': {
+        const seq: [number, number, number][] = [
+          [67, 0, 0.1],
+          [72, 0.1, 0.1],
+          [76, 0.2, 0.1],
+          [79, 0.3, 0.2],
+          [76, 0.5, 0.1],
+          [79, 0.6, 0.1],
+          [84, 0.7, 0.7],
+        ]
+        for (const [m, at, len] of seq) {
+          this.note(out, t + at, 'p50', mtof(m), len, { vol: 0.12, echo: 0.3, decay: false })
+          this.note(out, t + at, 'p25', mtof(m - 12), len, { vol: 0.06, decay: false })
+        }
+        this.note(out, t, 'tri', mtof(48), 0.6, { vol: 0.3 })
+        this.note(out, t + 0.7, 'tri', mtof(48), 0.7, { vol: 0.3 })
+        this.play('gong', delay + 0.7)
+        break
+      }
     }
   }
 
-  // ───────────────────────── kroncong BGM ─────────────────────────
+  // ───────────────────────── music ─────────────────────────
 
   private startMusic() {
     if (!this.ctx || this.schedulerId !== null) return
-    this.nextStepTime = this.ctx.currentTime + 0.1
+    this.nextStep = this.ctx.currentTime + 0.1
     this.step = 0
     this.schedulerId = window.setInterval(() => this.schedule(), 25)
   }
@@ -302,100 +420,45 @@ export class AudioEngine {
 
   private schedule() {
     const ctx = this.ctx!
-    const sixteenth = 60 / 104 / 4
-    while (this.nextStepTime < ctx.currentTime + 0.15) {
-      this.playStep(this.step, this.nextStepTime, sixteenth)
-      this.nextStepTime += sixteenth
+    while (this.nextStep < ctx.currentTime + 0.15) {
+      const sixteenth = 60 / this.tempo / 4
+      this.playStep(this.step, this.nextStep, sixteenth)
+      this.nextStep += sixteenth
       this.step++
     }
   }
 
-  private pluck(t: number, midi: number, peak: number, bright: number, decay: number) {
-    const ctx = this.ctx!
-    const o = ctx.createOscillator()
-    o.type = 'sawtooth'
-    o.frequency.value = mtof(midi)
-    const f = ctx.createBiquadFilter()
-    f.type = 'lowpass'
-    f.frequency.setValueAtTime(bright, t)
-    f.frequency.exponentialRampToValueAtTime(300, t + decay)
-    const g = ctx.createGain()
-    this.env(g, t, peak, 0.003, decay)
-    o.connect(f)
-    f.connect(g)
-    g.connect(this.musicBus)
-    o.start(t)
-    o.stop(t + decay + 0.05)
-  }
-
-  private playStep(step: number, t: number, sixteenth: number) {
-    const bar = Math.floor(step / 16) % PROGRESSION.length
+  private playStep(step: number, t: number, s16: number) {
+    const out = this.musicBus
+    const barIdx = Math.floor(step / 16) % BARS.length
+    const pass = Math.floor(step / (16 * BARS.length))
     const pos = step % 16
-    const chord = CHORDS[PROGRESSION[bar]]
+    const chord = CHORDS[BARS[barIdx]]
     const root = chord[0]
 
-    // "Cak": bright ukulele chop on the off-beat eighths.
-    if (pos % 4 === 2) chord.forEach((n, i) => this.pluck(t + i * 0.008, n + 12, 0.035, 4200, 0.12))
-    // "Cuk": lower interlocking strum on the sixteenth after each beat.
-    if (pos % 4 === 1 || pos % 4 === 3) chord.slice(0, 3).forEach((n) => this.pluck(t, n, 0.022, 2200, 0.09))
-    // Plucked cello bass: root and fifth, with a walking approach on beat 4.
+    // "Cak": thin 12.5% pulse chops on the off-beat eighths, as a quick chip arpeggio.
+    if (pos % 4 === 2) chord.slice(0, 3).forEach((n, i) => this.note(out, t + i * 0.012, 'p12', mtof(n + 12), 0.06, { vol: 0.045 }))
+    // "Cuk": 25% pulse answering on the sixteenths.
+    if (pos % 4 === 1 || pos % 4 === 3) this.note(out, t, 'p25', mtof(chord[(pos >> 1) % chord.length]), 0.045, { vol: 0.035 })
+    // Plucked cello bass on the triangle: root, fifth, root, walk up to the next bar.
     if (pos % 4 === 0) {
       const beat = pos / 4
-      const nextRoot = CHORDS[PROGRESSION[(bar + 1) % PROGRESSION.length]][0]
-      const note = beat === 0 ? root : beat === 1 ? root + 7 : beat === 2 ? root : nextRoot - 1
-      this.tone(this.musicBus, t, mtof(note - 12), { type: 'triangle', peak: 0.22, decay: 0.32 })
-      this.tone(this.musicBus, t, mtof(note), { peak: 0.06, decay: 0.2 })
+      const nextRoot = CHORDS[BARS[(barIdx + 1) % BARS.length]][0]
+      const n = beat === 0 ? root : beat === 1 ? root + 7 : beat === 2 ? root + 12 : nextRoot - 1
+      this.note(out, t, 'tri', mtof(n - 12), s16 * 3, { vol: 0.32 })
     }
-    // Brushes on 2 and 4.
-    if (pos === 4 || pos === 12) this.noiseBurst(this.musicBus, t, { type: 'highpass', freq: 5000, peak: 0.05, attack: 0.01, decay: 0.12 })
+    // Brushes: soft hats with an accent on 2 and 4.
+    if (pos % 2 === 0) this.noise(out, t, 0.03, { vol: pos === 4 || pos === 12 ? 0.05 : 0.025, hp: 6000, rate: 1.6 })
 
-    // Flute melody: stepwise wander that leans on chord tones.
-    if (pos % 4 === 0 && Math.random() < (pos === 0 ? 0.95 : 0.55)) {
-      const move = [-2, -1, -1, 1, 1, 2, 0][Math.floor(Math.random() * 7)]
-      this.melodyNote = Math.max(2, Math.min(SCALE.length - 1, this.melodyNote + move))
-      let midi = 65 + SCALE[this.melodyNote]
-      if (pos === 0) {
-        const tones = chord.map((n) => n + 12)
-        midi = tones.reduce((a, b) => (Math.abs(b - midi) < Math.abs(a - midi) ? b : a))
+    // Melody: the 50% pulse "flute", with an octave lift on every other pass.
+    if (pos === 0) {
+      let at = t
+      const lift = pass % 2 === 1 ? 12 : 0
+      for (const [m, len8] of MELODY[barIdx]) {
+        const len = len8 * 2 * s16
+        if (m !== null) this.note(out, at, 'p50', mtof(m + lift), len * 0.95, { vol: 0.075, vibrato: 0.012, echo: 0.45, decay: false })
+        at += len
       }
-      const len = sixteenth * (Math.random() < 0.4 ? 8 : 4)
-      this.flute(t, midi, len)
-    }
-  }
-
-  private flute(t: number, midi: number, len: number) {
-    const ctx = this.ctx!
-    const o = ctx.createOscillator()
-    o.type = 'sine'
-    o.frequency.value = mtof(midi)
-    const vib = ctx.createOscillator()
-    vib.frequency.value = 5.2
-    const vibAmt = ctx.createGain()
-    vibAmt.gain.value = mtof(midi) * 0.006
-    vib.connect(vibAmt)
-    vibAmt.connect(o.frequency)
-    const g = ctx.createGain()
-    g.gain.setValueAtTime(0.0001, t)
-    g.gain.linearRampToValueAtTime(0.07, t + 0.06)
-    g.gain.setValueAtTime(0.06, t + len * 0.7)
-    g.gain.exponentialRampToValueAtTime(0.0001, t + len)
-    const breath = ctx.createBufferSource()
-    breath.buffer = this.noise
-    const bf = ctx.createBiquadFilter()
-    bf.type = 'bandpass'
-    bf.frequency.value = mtof(midi) * 2
-    bf.Q.value = 8
-    const bg = ctx.createGain()
-    bg.gain.value = 0.15
-    breath.connect(bf)
-    bf.connect(bg)
-    bg.connect(g)
-    o.connect(g)
-    g.connect(this.musicBus)
-    g.connect(this.reverbSend)
-    for (const n of [o, vib, breath]) {
-      n.start(t, n === breath ? Math.random() : undefined)
-      n.stop(t + len + 0.05)
     }
   }
 
@@ -403,99 +466,47 @@ export class AudioEngine {
 
   private startAmbience() {
     const ctx = this.ctx!
-    // Crowd murmur: brown noise through a voice-band filter, slowly swelling.
+    // Crowd murmur: low noise through a voice-band filter with a slow swell.
     const crowd = ctx.createBufferSource()
-    crowd.buffer = this.brown
+    crowd.buffer = this.white
     crowd.loop = true
-    const cf = ctx.createBiquadFilter()
-    cf.type = 'bandpass'
-    cf.frequency.value = 650
-    cf.Q.value = 0.7
-    const cg = ctx.createGain()
-    cg.gain.value = 0.35
+    crowd.playbackRate.value = 0.25
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.value = 520
+    bp.Q.value = 0.8
+    const g = ctx.createGain()
+    g.gain.value = 0.18
     const lfo = ctx.createOscillator()
-    lfo.frequency.value = 0.13
-    const lfoAmt = ctx.createGain()
-    lfoAmt.gain.value = 0.12
-    lfo.connect(lfoAmt)
-    lfoAmt.connect(cg.gain)
-    crowd.connect(cf)
-    cf.connect(cg)
-    cg.connect(this.ambBus)
-
-    // Wok sizzle: hissing high noise with random crackles.
-    const sizzle = ctx.createBufferSource()
-    sizzle.buffer = this.noise
-    sizzle.loop = true
-    const sf = ctx.createBiquadFilter()
-    sf.type = 'highpass'
-    sf.frequency.value = 5500
-    const sg = ctx.createGain()
-    sg.gain.value = 0.035
-    const slfo = ctx.createOscillator()
-    slfo.frequency.value = 0.07
-    const slfoAmt = ctx.createGain()
-    slfoAmt.gain.value = 0.025
-    slfo.connect(slfoAmt)
-    slfoAmt.connect(sg.gain)
-    sizzle.connect(sf)
-    sf.connect(sg)
-    sg.connect(this.ambBus)
-
+    lfo.frequency.value = 0.12
+    const amt = ctx.createGain()
+    amt.gain.value = 0.07
+    lfo.connect(amt)
+    amt.connect(g.gain)
+    crowd.connect(bp)
+    bp.connect(g)
+    g.connect(this.ambBus)
     crowd.start()
-    sizzle.start()
     lfo.start()
-    slfo.start()
-    this.ambienceNodes = [crowd, sizzle, lfo, slfo]
 
-    // Distant voices calling out and oil crackles.
+    // Wok sizzle crackles and the odd distant hawker call, chip style.
     const tick = () => {
       if (!this.ctx) return
       const t = this.ctx.currentTime
-      if (Math.random() < 0.55) this.voice(t)
-      for (let i = 0; i < 3; i++) {
-        if (Math.random() < 0.6) {
-          this.noiseBurst(this.ambBus, t + Math.random() * 0.5, { type: 'highpass', freq: 3500, peak: 0.04 + Math.random() * 0.05, decay: 0.012 })
-        }
+      for (let i = 0; i < 3; i++) if (Math.random() < 0.6) this.noise(this.ambBus, t + Math.random() * 0.4, 0.015, { vol: 0.05, hp: 5000, rate: 2 })
+      if (Math.random() < 0.12) {
+        const base = 60 + Math.floor(Math.random() * 8)
+        this.note(this.ambBus, t + 0.1, 'p25', mtof(base), 0.12, { vol: 0.018, slideTo: mtof(base + 3) })
+        this.note(this.ambBus, t + 0.24, 'p25', mtof(base + 3), 0.18, { vol: 0.014, slideTo: mtof(base - 2) })
       }
-      this.chatterId = window.setTimeout(tick, 350 + Math.random() * 900)
+      this.ambId = window.setTimeout(tick, 400 + Math.random() * 700)
     }
     tick()
   }
 
-  private voice(t: number) {
-    const ctx = this.ctx!
-    const o = ctx.createOscillator()
-    o.type = 'sawtooth'
-    const base = 140 + Math.random() * 160
-    const len = 0.25 + Math.random() * 0.5
-    o.frequency.setValueAtTime(base, t)
-    o.frequency.linearRampToValueAtTime(base * (0.8 + Math.random() * 0.5), t + len)
-    const f1 = ctx.createBiquadFilter()
-    f1.type = 'bandpass'
-    f1.frequency.setValueAtTime(500 + Math.random() * 400, t)
-    f1.frequency.linearRampToValueAtTime(700 + Math.random() * 600, t + len)
-    f1.Q.value = 5
-    const lp = ctx.createBiquadFilter()
-    lp.type = 'lowpass'
-    lp.frequency.value = 1400
-    const g = ctx.createGain()
-    g.gain.setValueAtTime(0.0001, t)
-    g.gain.linearRampToValueAtTime(0.025 + Math.random() * 0.02, t + 0.05)
-    g.gain.linearRampToValueAtTime(0.0001, t + len)
-    o.connect(f1)
-    f1.connect(lp)
-    lp.connect(g)
-    g.connect(this.ambBus)
-    g.connect(this.reverbSend)
-    o.start(t)
-    o.stop(t + len + 0.05)
-  }
-
   dispose() {
     this.stopMusic()
-    if (this.chatterId !== null) window.clearTimeout(this.chatterId)
-    for (const n of this.ambienceNodes) (n as AudioScheduledSourceNode).stop?.()
+    if (this.ambId !== null) window.clearTimeout(this.ambId)
     void this.ctx?.close()
     this.ctx = null
   }

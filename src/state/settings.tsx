@@ -9,8 +9,8 @@ export interface Settings {
   ambience: number
   musicOn: boolean
   sfxOn: boolean
-  /** -1 (flatter, closer) … 1 (higher, top-down) */
-  cameraTilt: number
+  /** CRT-style scanlines over the pixels. */
+  scanlines: boolean
   numPlayers: number
   difficulty: Difficulty
   totalRounds: number
@@ -24,14 +24,14 @@ const DEFAULTS: Settings = {
   ambience: 0.45,
   musicOn: true,
   sfxOn: true,
-  cameraTilt: 0,
+  scanlines: true,
   numPlayers: 4,
   difficulty: 'standard',
   totalRounds: 3,
   sortMode: 'value',
 }
 
-const KEY = 'cilok.settings.v1'
+const KEY = 'cilok.settings.v2'
 
 function load(): Settings {
   try {

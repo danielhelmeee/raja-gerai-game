@@ -1,7 +1,7 @@
 import { shapeName } from './rules'
 import type { GameEvent, Player } from './types'
 
-export type Tone = 'jual' | 'cilok' | 'pass' | 'collect' | 'pusing' | 'round' | 'info'
+export type Tone = 'jual' | 'cilok' | 'pass' | 'collect' | 'round' | 'info'
 
 const who = (players: Player[], id: number) => (players[id]?.isHuman ? 'You' : players[id]?.name ?? '?')
 const whose = (players: Player[], id: number) => (players[id]?.isHuman ? 'your' : `${players[id]?.name}'s`)
@@ -18,8 +18,9 @@ export function describe(event: GameEvent, players: Player[]): { text: string; t
     }
     case 'cilok': {
       const side = event.stamp ? ' with the CILOK & JUAL stamp' : ''
+      const end = event.end === 'low' ? 'left' : 'right'
       return {
-        text: `${who(players, event.actor)} CILOK-ed the ${event.card.value} (${event.card.dish}) from ${whose(players, event.target)} Gerai${side}! +1 DUIT to ${who(players, event.target)}`,
+        text: `${who(players, event.actor)} CILOK-ed the ${end} card, a ${event.card.value} (${event.card.dish}), from ${whose(players, event.target)} Gerai${side}! +1 DUIT to ${who(players, event.target)}`,
         tone: 'cilok',
       }
     }

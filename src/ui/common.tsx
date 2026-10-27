@@ -4,25 +4,19 @@ import { useSettings } from '../state/settings'
 
 export const click = () => audio.play('ui')
 
-export function MusicIcon({ off }: { off?: boolean }) {
+/** Icons drawn on an 8×8 pixel grid. */
+function PixelIcon({ rows }: { rows: string[] }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-      <path d="M9 18V5l11-2v13" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="17" cy="16" r="3" />
-      {off && <path d="M3 3l18 18" />}
+    <svg viewBox="0 0 8 8" className="h-[max(calc(var(--s)*7),14px)] w-[max(calc(var(--s)*7),14px)]" shapeRendering="crispEdges" fill="currentColor">
+      {rows.flatMap((row, y) => [...row].map((c, x) => (c === '#' ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" /> : null)))}
     </svg>
   )
 }
 
-export function SpeakerIcon({ off }: { off?: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 5L6 9H2v6h4l5 4V5z" />
-      {off ? <path d="M23 9l-6 6M17 9l6 6" /> : <path d="M15.5 8.5a5 5 0 010 7M19 5a10 10 0 010 14" />}
-    </svg>
-  )
-}
+const NOTE = ['...####.', '...#..#.', '...#..#.', '...#..#.', '.###.##.', '####.###', '.##..##.', '........']
+const NOTE_OFF = ['#..####.', '.#.#..#.', '..##..#.', '...#..#.', '.####.#.', '####.##.', '.##..###', '.......#']
+const SPEAKER = ['...#....', '..##..#.', '####.#..', '####.#.#', '####.#.#', '####.#..', '..##..#.', '...#....']
+const SPEAKER_OFF = ['...#....', '..##....', '####.#.#', '####..#.', '####..#.', '####.#.#', '..##....', '...#....']
 
 export function AudioToggles({ light }: { light?: boolean }) {
   const { settings, update } = useSettings()
@@ -30,7 +24,7 @@ export function AudioToggles({ light }: { light?: boolean }) {
   return (
     <div className="flex gap-2">
       <button
-        className={`btn ${cls} !px-3`}
+        className={`px-btn ${cls} !px-2`}
         aria-label={settings.musicOn ? 'Mute music' : 'Play music'}
         title="Music"
         onClick={() => {
@@ -39,10 +33,10 @@ export function AudioToggles({ light }: { light?: boolean }) {
           click()
         }}
       >
-        <MusicIcon off={!settings.musicOn} />
+        <PixelIcon rows={settings.musicOn ? NOTE : NOTE_OFF} />
       </button>
       <button
-        className={`btn ${cls} !px-3`}
+        className={`px-btn ${cls} !px-2`}
         aria-label={settings.sfxOn ? 'Mute sound effects' : 'Unmute sound effects'}
         title="Sound effects"
         onClick={() => {
@@ -51,7 +45,7 @@ export function AudioToggles({ light }: { light?: boolean }) {
           if (!settings.sfxOn) window.setTimeout(click, 30)
         }}
       >
-        <SpeakerIcon off={!settings.sfxOn} />
+        <PixelIcon rows={settings.sfxOn ? SPEAKER : SPEAKER_OFF} />
       </button>
     </div>
   )
@@ -60,12 +54,14 @@ export function AudioToggles({ light }: { light?: boolean }) {
 export function Modal({ children, onClose, wide }: { children: ReactNode; onClose?: () => void; wide?: boolean }) {
   return (
     <div
-      className="fade-in fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(10,5,15,0.7)] p-3"
       onClick={(e) => {
         if (e.target === e.currentTarget && onClose) onClose()
       }}
     >
-      <div className={`panel pop-3d max-h-[92vh] w-full overflow-y-auto p-5 sm:p-7 ${wide ? 'max-w-2xl' : 'max-w-md'}`}>{children}</div>
+      <div className={`px-panel pop-in max-h-[94vh] w-full overflow-y-auto p-[max(calc(var(--s)*7),16px)] ${wide ? 'max-w-[680px]' : 'max-w-[440px]'}`}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -89,7 +85,7 @@ export function Toggle<T extends string | number>({
           role="radio"
           aria-checked={o.value === value}
           data-on={o.value === value}
-          className="chip-toggle"
+          className="px-chip"
           onClick={() => {
             click()
             onChange(o.value)

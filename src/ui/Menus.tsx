@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { audio } from '../audio/AudioEngine'
 import { OPPONENT_ORDER, PERSONAS } from '../game/personas'
 import type { Difficulty } from '../game/types'
@@ -6,41 +7,60 @@ import { useSettings } from '../state/settings'
 import { AudioToggles, click, Modal, Toggle } from './common'
 
 export function MainMenu() {
-  const { setScreen, startTutorial, setOverlay } = useGame()
-  const go = (fn: () => void) => () => {
+  const { setScreen, startTutorial, setOverlay, overlay } = useGame()
+  const [active, setActive] = useState(0)
+  const items: [string, () => void][] = [
+    ['Start Game', () => setScreen('setup')],
+    ['Tutorial', startTutorial],
+    ['How to Play', () => setOverlay('howto')],
+    ['Settings', () => setOverlay('settings')],
+  ]
+  const choose = (i: number) => {
     audio.unlock()
     click()
-    fn()
+    items[i][1]()
   }
+
+  // Classic menu cursor: arrow keys to move, Enter to choose.
+  useEffect(() => {
+    if (overlay !== 'none') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        audio.unlock()
+        audio.play('select')
+        setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length)
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        choose(active)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   return (
-    <div className="fade-in pointer-events-none fixed inset-0 z-20 flex flex-col items-center justify-between p-6 sm:items-start sm:p-12">
+    <div className="pointer-events-none fixed inset-0 z-20 flex flex-col items-center justify-between p-4 sm:items-start sm:p-[calc(var(--s)*12)]">
       <div className="pointer-events-auto self-end">
         <AudioToggles />
       </div>
       <div className="pointer-events-auto flex flex-col items-center sm:items-start">
-        <p className="mb-1 font-retro text-sm font-semibold uppercase tracking-[0.35em] text-kunyit/90">Pasar Malam Showdown</p>
-        <h1 className="neon-title text-7xl leading-none sm:text-9xl">CILOK!</h1>
-        <p className="mt-3 max-w-sm text-center font-retro text-base text-kertas/80 sm:text-left">
-          Out-sell the rival hawkers, snatch their best dishes, and stack the biggest Habuan on your plate.
+        <p className="font-pixel text-[max(calc(var(--s)*5),11px)] uppercase tracking-[0.3em] text-kunyit [text-shadow:var(--u)_var(--u)_0_#1a0f14]">
+          Pasar Malam Showdown
         </p>
-        <div className="mt-7 flex w-64 flex-col gap-3">
-          <button className="btn btn-jual py-3.5 text-base" onClick={go(() => setScreen('setup'))}>
-            Start Game
-          </button>
-          <button className="btn btn-stamp py-3" onClick={go(startTutorial)}>
-            Interactive Tutorial
-          </button>
-          <div className="grid grid-cols-2 gap-3">
-            <button className="btn btn-plain" onClick={go(() => setOverlay('howto'))}>
-              How to Play
+        <h1 className="neon-title mt-2">CILOK!</h1>
+        <nav className="mt-[max(calc(var(--s)*10),20px)] flex flex-col" aria-label="Main menu">
+          {items.map(([label], i) => (
+            <button key={label} className="menu-item" data-active={active === i} onPointerEnter={() => setActive(i)} onClick={() => choose(i)}>
+              <span className="cursor">►</span>
+              {label}
             </button>
-            <button className="btn btn-plain" onClick={go(() => setOverlay('settings'))}>
-              Settings
-            </button>
-          </div>
-        </div>
+          ))}
+        </nav>
       </div>
-      <p className="pointer-events-auto text-xs text-kertas/40">1 player vs up to 3 AI hawkers · climbing card game with a cheeky twist</p>
+      <p className="blink pointer-events-auto font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kertas/70">
+        ↑ ↓ + Enter or click · 1 player vs up to 3 hawkers
+      </p>
     </div>
   )
 }
@@ -51,12 +71,11 @@ export function SetupScreen() {
   const opponents = OPPONENT_ORDER.slice(0, settings.numPlayers - 1).map((id) => PERSONAS[id])
   return (
     <Modal onClose={() => setScreen('menu')}>
-      <h2 className="font-display text-3xl text-sambal">Buka Gerai</h2>
-      <p className="mt-1 text-sm text-kopi/70">Set up tonight's market.</p>
-
-      <div className="mt-5 space-y-5">
+      <h2 className="px-title">Buka Gerai</h2>
+      <p className="px-text mt-1 text-kopi/70">Set up tonight's market.</p>
+      <div className="mt-4 space-y-4">
         <section>
-          <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wider text-kopi/60">Hawkers at the table</h3>
+          <h3 className="px-label mb-2">Hawkers at the table</h3>
           <Toggle
             label="Number of players"
             value={settings.numPlayers}
@@ -67,12 +86,12 @@ export function SetupScreen() {
               { value: 4, label: '4 players' },
             ]}
           />
-          <p className="mt-2 text-sm text-kopi/80">
-            You vs <strong>{opponents.map((o) => o.name).join(', ')}</strong>
+          <p className="px-text mt-2 text-kopi/80">
+            You vs <b>{opponents.map((o) => o.name).join(', ')}</b>
           </p>
         </section>
         <section>
-          <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wider text-kopi/60">Difficulty</h3>
+          <h3 className="px-label mb-2">Difficulty</h3>
           <Toggle<Difficulty>
             label="Difficulty"
             value={settings.difficulty}
@@ -83,41 +102,34 @@ export function SetupScreen() {
               { value: 'hard', label: 'Otai' },
             ]}
           />
-          <p className="mt-2 text-xs text-kopi/60">
+          <p className="px-text mt-2 text-kopi/60">
             {settings.difficulty === 'easy'
               ? 'Easy: the hawkers play loosely and rarely cilok.'
               : settings.difficulty === 'standard'
                 ? 'Standard: sensible play with the odd surprise.'
-                : 'Hard: sharp hawkers who save their bombs and steal with purpose.'}
+                : 'Hard: sharp hawkers who pick the right end to steal.'}
           </p>
         </section>
         <section>
-          <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wider text-kopi/60">Rounds</h3>
+          <h3 className="px-label mb-2">Rounds</h3>
           <Toggle
             label="Rounds"
             value={settings.totalRounds}
             onChange={(r) => update({ totalRounds: r })}
             options={[
-              { value: 1, label: '1' },
-              { value: 3, label: '3' },
-              { value: 5, label: '5' },
+              { value: 1, label: '1 round' },
+              { value: 3, label: '3 rounds' },
+              { value: 5, label: '5 rounds' },
             ]}
           />
         </section>
       </div>
-
-      <div className="mt-7 flex gap-3">
-        <button
-          className="btn btn-plain flex-1 border-2 border-kopi/15"
-          onClick={() => {
-            click()
-            setScreen('menu')
-          }}
-        >
+      <div className="mt-6 flex gap-3">
+        <button className="px-btn btn-plain flex-1" onClick={() => (click(), setScreen('menu'))}>
           Back
         </button>
         <button
-          className="btn btn-jual flex-[2] py-3 text-base"
+          className="px-btn btn-jual flex-[2]"
           onClick={() => {
             audio.unlock()
             click()
@@ -133,41 +145,41 @@ export function SetupScreen() {
 
 const RULES: { term: string; color: string; body: string }[] = [
   { term: 'Goal', color: '#3B2416', body: 'Sell every dish in your hand before the other hawkers. Each round scores HABUAN + DUIT − dishes left in your hand.' },
-  { term: 'Dish cards', color: '#3B2416', body: '40 cards: numbers 1–10 in four food groups (Kopitiam, Nasi, Roti, Kuih). Only the number matters for play. Sort your hand however you like.' },
-  { term: 'GERAI', color: '#3B2416', body: "The dishes on sale in the middle of the table. Whoever played last owns it." },
-  { term: 'JUAL', color: '#00A859', body: 'Play a set that beats the Gerai: same shape, higher number. Shapes: single, pair, triple, four of a kind, or a run of 3+ numbers in a row (a run of 3 only beats a run of 3, and so on). On an empty Gerai, open with any shape.' },
-  { term: 'LALU', color: '#3B2416', body: "Pass. You can still play later in the same Gerai." },
-  { term: 'HABUAN', color: '#00A859', body: 'When play comes back round to the Gerai owner without anyone beating it, they collect every dish played on that Gerai as Habuan (+1 point each) and open the next one.' },
-  { term: 'CILOK!', color: '#D7362B', body: "Instead of playing, snatch the highest dish from another hawker's Gerai (it needs 2+ dishes) into your hand. The Gerai shrinks (a pair becomes a single, a run loses its top) and your turn ends." },
-  { term: 'DUIT', color: '#B8740E', body: 'Whoever you CILOK from gets a DUIT coin as compensation: +1 point at the end of the round.' },
-  { term: 'CILOK & JUAL', color: '#B8740E', body: 'Once per round, use your wooden stamp to CILOK and then JUAL in the same turn: steal a dish, then sell straight away.' },
-  { term: 'PUSING', color: '#7A2335', body: 'Four of a kind beats any Gerai and flips the ranking: for the rest of the round, LOWER numbers win. Another four of a kind flips it back.' },
-  { term: 'Round end', color: '#3B2416', body: 'The round ends the moment someone empties their hand (they also take the Gerai). The winner opens the next round. Highest total after the last round is Raja Pasar Malam!' },
+  { term: 'Dishes', color: '#3B2416', body: '40 cards: numbers 1–10 in four food groups (Kopitiam, Nasi, Roti, Kuih). Only the number matters. Your hand is sorted for you.' },
+  { term: 'Gerai', color: '#3B2416', body: 'The dishes on sale in the middle of the table. Whoever played last owns it.' },
+  { term: 'Jual', color: '#00A859', body: 'Play dishes that beat the Gerai: same shape, higher number. Shapes: single, pair, triple, four of a kind, or a run of 3+ numbers in a row (a run of 3 only beats a run of 3, and so on). On an empty Gerai, open with any shape.' },
+  { term: 'Lalu', color: '#3B2416', body: 'Pass. You can still play later in the same Gerai.' },
+  { term: 'Habuan', color: '#00A859', body: 'When play comes back round to the Gerai owner unbeaten, they collect every dish played on that Gerai (+1 point each) and open the next one.' },
+  { term: 'Cilok!', color: '#C8352B', body: "Instead of playing, snatch the dish at EITHER END of another hawker's Gerai (it needs 2+ dishes) into your hand. Press CILOK!, then tap the left or right dish. Taking the top of a run leaves it weaker; taking the bottom leaves it stronger for the next hawker. Your turn then ends." },
+  { term: 'Duit', color: '#B8740E', body: 'Whoever you CILOK from gets a DUIT coin as compensation: +1 point at the end of the round.' },
+  { term: 'Cilok & Jual', color: '#B8740E', body: 'Once per round, stamp your wooden stamp to CILOK and then JUAL in the same turn: steal a dish, then sell straight away.' },
+  { term: 'Round end', color: '#3B2416', body: 'The round ends the moment someone empties their hand (they also take the Gerai). The winner opens the next round. The highest total after the last round is Raja Pasar Malam!' },
 ]
 
 export function HowToPlay() {
   const { setOverlay, startTutorial, screen } = useGame()
+  const back = () => setOverlay(screen === 'game' ? 'pause' : 'none')
   return (
-    <Modal wide onClose={() => setOverlay(screen === 'game' ? 'pause' : 'none')}>
-      <h2 className="font-display text-3xl text-sambal">How to Play</h2>
-      <p className="mt-1 text-sm text-kopi/70">A climbing card game in the Big Two tradition, at a 1980s pasar malam.</p>
-      <dl className="mt-5 space-y-3">
+    <Modal wide onClose={back}>
+      <h2 className="px-title">How to Play</h2>
+      <p className="px-text mt-1 text-kopi/70">A climbing card game in the Big Two tradition, at a 1980s pasar malam.</p>
+      <dl className="mt-4 space-y-3">
         {RULES.map((r) => (
-          <div key={r.term} className="grid grid-cols-[110px_1fr] gap-3 sm:grid-cols-[130px_1fr]">
-            <dt className="font-display text-sm leading-6" style={{ color: r.color }}>
+          <div key={r.term} className="grid grid-cols-[minmax(84px,26%)_1fr] gap-3">
+            <dt className="font-pixel text-[max(calc(var(--s)*5),11px)] uppercase leading-6" style={{ color: r.color }}>
               {r.term}
             </dt>
-            <dd className="text-sm leading-6 text-kopi/90">{r.body}</dd>
+            <dd className="px-text text-kopi/90">{r.body}</dd>
           </div>
         ))}
       </dl>
-      <div className="mt-6 rounded-2xl bg-kopi/5 p-3 text-xs text-kopi/70">
-        Shortcuts: <b>J</b> Jual · <b>C</b> Cilok · <b>S</b> Cilok &amp; Jual · <b>L</b> Lalu · <b>Esc</b> pause. Drag the table or scroll to tilt the camera.
+      <div className="px-text mt-5 border-[length:var(--u)] border-dashed border-kopi/30 p-3 text-kopi/70">
+        Keys: <b>J</b> Jual · <b>C</b> Cilok · <b>S</b> Cilok &amp; Jual · <b>← →</b> pick an end · <b>L</b> Lalu · <b>Esc</b> cancel / pause
       </div>
-      <div className="mt-6 flex gap-3">
+      <div className="mt-5 flex gap-3">
         {screen !== 'game' && (
           <button
-            className="btn btn-stamp flex-1"
+            className="px-btn btn-stamp flex-1"
             onClick={() => {
               audio.unlock()
               click()
@@ -177,25 +189,19 @@ export function HowToPlay() {
             Try the tutorial
           </button>
         )}
-        <button
-          className="btn btn-jual flex-1"
-          onClick={() => {
-            click()
-            setOverlay(screen === 'game' ? 'pause' : 'none')
-          }}
-        >
-          Faham! (Got it)
+        <button className="px-btn btn-jual flex-1" onClick={() => (click(), back())}>
+          Faham!
         </button>
       </div>
     </Modal>
   )
 }
 
-function Slider({ label, value, onChange, min = 0, max = 1, step = 0.05 }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number }) {
+function Slider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
-    <label className="grid grid-cols-[110px_1fr] items-center gap-3 text-sm font-semibold">
-      <span>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    <label className="grid grid-cols-[110px_1fr] items-center gap-3">
+      <span className="px-label !text-kopi">{label}</span>
+      <input type="range" min={0} max={1} step={0.05} value={value} onChange={(e) => onChange(Number(e.target.value))} />
     </label>
   )
 }
@@ -203,42 +209,48 @@ function Slider({ label, value, onChange, min = 0, max = 1, step = 0.05 }: { lab
 export function SettingsPanel() {
   const { setOverlay, screen } = useGame()
   const { settings, update } = useSettings()
+  const back = () => setOverlay(screen === 'game' ? 'pause' : 'none')
   return (
-    <Modal onClose={() => setOverlay(screen === 'game' ? 'pause' : 'none')}>
-      <h2 className="font-display text-3xl text-sambal">Settings</h2>
-      <div className="mt-5 space-y-4">
+    <Modal onClose={back}>
+      <h2 className="px-title">Settings</h2>
+      <div className="mt-4 space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-kopi/60">Audio</span>
+          <span className="px-label">Audio</span>
           <AudioToggles light />
         </div>
         <Slider label="Master" value={settings.master} onChange={(v) => update({ master: v })} />
         <Slider label="Music" value={settings.music} onChange={(v) => update({ music: v })} />
         <Slider label="Effects" value={settings.sfx} onChange={(v) => update({ sfx: v })} />
         <Slider label="Ambience" value={settings.ambience} onChange={(v) => update({ ambience: v })} />
-        <div className="border-t border-kopi/10 pt-4">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-kopi/60">Table</span>
+        <div className="border-t-[length:var(--u)] border-dashed border-kopi/20 pt-4">
+          <span className="px-label">Display</span>
         </div>
-        <Slider label="Camera tilt" min={-1} max={1} step={0.05} value={settings.cameraTilt} onChange={(v) => update({ cameraTilt: v })} />
-        <div className="grid grid-cols-[110px_1fr] items-center gap-3 text-sm font-semibold">
-          <span>Sort hand</span>
+        <div className="grid grid-cols-[110px_1fr] items-center gap-3">
+          <span className="px-label !text-kopi">Scanlines</span>
+          <Toggle
+            label="CRT scanlines"
+            value={settings.scanlines ? 'on' : 'off'}
+            onChange={(v) => update({ scanlines: v === 'on' })}
+            options={[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
+        </div>
+        <div className="grid grid-cols-[110px_1fr] items-center gap-3">
+          <span className="px-label !text-kopi">Sort hand</span>
           <Toggle
             label="Sort hand by"
             value={settings.sortMode}
             onChange={(v) => update({ sortMode: v })}
             options={[
               { value: 'value', label: 'Number' },
-              { value: 'group', label: 'Food group' },
+              { value: 'group', label: 'Group' },
             ]}
           />
         </div>
       </div>
-      <button
-        className="btn btn-jual mt-7 w-full"
-        onClick={() => {
-          click()
-          setOverlay(screen === 'game' ? 'pause' : 'none')
-        }}
-      >
+      <button className="px-btn btn-jual mt-6 w-full" onClick={() => (click(), back())}>
         Done
       </button>
     </Modal>

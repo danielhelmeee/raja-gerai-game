@@ -1,24 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { audio } from './audio/AudioEngine'
+import { PixelStage } from './pixel/PixelStage'
 import { GameProvider, useGame } from './state/GameContext'
 import { SettingsProvider } from './state/settings'
-import { Scene } from './three/Scene'
 import { GameHUD } from './ui/GameHUD'
 import { HowToPlay, MainMenu, SettingsPanel, SetupScreen } from './ui/Menus'
 
-/** Card textures are drawn on canvas, so the web fonts must be loaded first. */
-function useFontsReady() {
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    const loads = ['48px "Bungee"', '800 26px "Fraunces"', '600 15px "Fraunces"'].map((f) => document.fonts.load(f).catch(() => null))
-    const timeout = new Promise((r) => window.setTimeout(r, 2500))
-    void Promise.race([Promise.all(loads), timeout]).then(() => setReady(true))
-  }, [])
-  return ready
-}
-
 function Screens() {
-  const { screen, overlay } = useGame()
+  const { screen, overlay, state } = useGame()
+
+  // The deciding round gets a faster tune.
+  useEffect(() => {
+    audio.setFinalRound(screen === 'game' && state.totalRounds > 1 && state.round === state.totalRounds)
+  }, [screen, state.round, state.totalRounds])
+
   return (
     <>
       {screen === 'menu' && <MainMenu />}
@@ -31,8 +26,6 @@ function Screens() {
 }
 
 export default function App() {
-  const ready = useFontsReady()
-
   // Browsers only allow audio after a user gesture.
   useEffect(() => {
     const unlock = () => audio.unlock()
@@ -47,14 +40,10 @@ export default function App() {
   return (
     <SettingsProvider>
       <GameProvider>
-        <div className="fixed inset-0">
-          {ready ? (
-            <Scene />
-          ) : (
-            <div className="flex h-full items-center justify-center font-display text-2xl text-kunyit/70">Membuka gerai…</div>
-          )}
+        <div className="fixed inset-0 bg-[#0a0610]">
+          <PixelStage />
         </div>
-        {ready && <Screens />}
+        <Screens />
       </GameProvider>
     </SettingsProvider>
   )

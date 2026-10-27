@@ -13,9 +13,8 @@ export default {
         malam: '#140C1F',
       },
       fontFamily: {
-        display: ['"Bungee"', '"Cooper Black"', 'serif'],
-        retro: ['"Fraunces"', 'Georgia', 'serif'],
-        body: ['"Inter"', 'system-ui', 'sans-serif'],
+        pixel: ['"Silkscreen"', 'monospace'],
+        body: ['"Pixelify Sans"', 'system-ui', 'sans-serif'],
       },
     },
   },

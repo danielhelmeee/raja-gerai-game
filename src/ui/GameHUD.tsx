@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { audio } from '../audio/AudioEngine'
 import { PERSONAS } from '../game/personas'
 import { cilokResult } from '../game/rules'
 import { useGame, type ActionId } from '../state/GameContext'
@@ -6,48 +7,28 @@ import { useSettings } from '../state/settings'
 import { AudioToggles, click, Modal } from './common'
 
 const TONE_STYLE: Record<string, string> = {
-  jual: 'bg-hijau text-white',
-  cilok: 'bg-sambal text-white',
-  pass: 'bg-kertas text-kopi',
-  collect: 'bg-kunyit text-kopi',
-  pusing: 'bg-[#7A2335] text-kunyit',
-  round: 'bg-kopi text-kunyit',
-  info: 'bg-kertas text-kopi',
+  jual: 'bg-[#00A859] text-white',
+  cilok: 'bg-[#C8352B] text-white',
+  pass: 'bg-[#FBF3DF] text-[#3B2416]',
+  collect: 'bg-[#F4B42A] text-[#3B2416]',
+  round: 'bg-[#3B2416] text-[#F4B42A]',
+  info: 'bg-[#FBF3DF] text-[#3B2416]',
 }
 
 function TopBar() {
   const { state, setOverlay, tutorial } = useGame()
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-[max(calc(var(--s)*3),6px)]">
       <div className="pointer-events-auto flex gap-2">
-        <button
-          className="btn btn-ghost !px-3"
-          aria-label="Pause menu"
-          onClick={() => {
-            click()
-            setOverlay('pause')
-          }}
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-            <path d="M4 7h16M4 12h16M4 17h16" />
-          </svg>
+        <button className="px-btn btn-ghost !px-2" aria-label="Pause menu" onClick={() => (click(), setOverlay('pause'))}>
+          ≡
         </button>
-        <button
-          className="btn btn-ghost !px-3.5 font-display"
-          aria-label="How to play"
-          onClick={() => {
-            click()
-            setOverlay('howto')
-          }}
-        >
+        <button className="px-btn btn-ghost !px-2.5" aria-label="How to play" onClick={() => (click(), setOverlay('howto'))}>
           ?
         </button>
       </div>
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="rounded-full bg-kopi/80 px-4 py-1.5 font-display text-sm text-kunyit shadow-lg backdrop-blur">
-          {tutorial.active ? 'TUTORIAL' : `PUSINGAN ${state.round}/${state.totalRounds}`}
-        </div>
-        {state.pusing && <div className="pusing-chip text-xs">PUSING: low beats high</div>}
+      <div className="px-dark font-pixel text-[max(calc(var(--s)*5),11px)] uppercase text-kunyit" style={{ padding: 'max(calc(var(--s)*2),5px) max(calc(var(--s)*4),9px)' }}>
+        {tutorial.active ? 'Tutorial' : `Pusingan ${state.round}/${state.totalRounds}`}
       </div>
       <div className="pointer-events-auto">
         <AudioToggles />
@@ -62,22 +43,22 @@ function Banner() {
   const last = messages[messages.length - 1]
   if (!last) return null
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[4.25rem] z-20 flex flex-col items-center px-3 sm:top-[4.5rem]">
+    <div className="pointer-events-none fixed inset-x-0 top-[max(calc(var(--s)*17),40px)] z-20 flex flex-col items-center px-3">
       <button
         key={last.id}
-        className={`banner-in pointer-events-auto max-w-[min(92vw,640px)] rounded-2xl px-4 py-2 text-center text-[13px] font-bold shadow-xl sm:text-sm ${TONE_STYLE[last.tone]}`}
+        className={`wipe-in pointer-events-auto max-w-[min(94vw,700px)] border-[length:var(--u)] border-[#1A0F14] px-3 py-1 text-center font-body text-[max(calc(var(--s)*5),12px)] font-semibold shadow-[var(--u)_var(--u)_0_rgba(0,0,0,0.5)] ${TONE_STYLE[last.tone]}`}
         onClick={() => setShowLog((s) => !s)}
         title="Show recent plays"
       >
         {last.text}
       </button>
       {showLog && (
-        <div className="panel pointer-events-auto mt-2 max-h-56 w-[min(92vw,460px)] overflow-y-auto p-3 text-xs">
+        <div className="px-panel pointer-events-auto mt-2 max-h-56 w-[min(94vw,480px)] overflow-y-auto p-3">
           {[...messages]
             .reverse()
             .slice(0, 14)
             .map((m) => (
-              <div key={m.id} className="border-b border-kopi/10 py-1.5 last:border-0">
+              <div key={m.id} className="px-text border-b border-dashed border-kopi/20 py-1 last:border-0">
                 {m.text}
               </div>
             ))}
@@ -87,108 +68,95 @@ function Banner() {
   )
 }
 
-function PlayerPanel() {
+function PlayerStats({ compact }: { compact?: boolean }) {
   const { state } = useGame()
   const me = state.players[0]
   if (!me) return null
   const active = state.status === 'playing' && state.turn === 0
   return (
-    <div className={`telemetry !min-w-0 ${active ? 'telemetry-active' : ''}`}>
-      <div className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-hijau" />
-        <span className="font-retro text-[13px] font-extrabold text-kopi">You</span>
-        {active && <span className="ml-1 rounded-full bg-hijau px-1.5 text-[10px] font-extrabold uppercase text-white">Your turn</span>}
-      </div>
-      <div className="mt-1 flex gap-2 text-[12px] font-semibold text-kopi/80">
-        <span title="Cards in hand">🂠 {me.hand.length}</span>
-        <span title="Duit coins">🪙 {me.duit}</span>
-        <span title="Habuan">🏆 {me.habuan.length}</span>
-      </div>
-      <div className="mt-0.5 text-[10px] uppercase tracking-wide text-kopi/60">Total {me.total}</div>
+    <div
+      className={`px-panel flex items-center gap-2 font-pixel uppercase ${active ? '!border-[#00A859] !shadow-[0_0_0_var(--u)_#00A859,calc(var(--u)*2)_calc(var(--u)*2)_0_rgba(0,0,0,0.55)]' : ''}`}
+      style={{ padding: 'max(calc(var(--s)*1.5),4px) max(calc(var(--s)*3),7px)', fontSize: 'max(calc(var(--s)*4.5),10px)' }}
+    >
+      <span className="inline-block h-[max(calc(var(--s)*3),6px)] w-[max(calc(var(--s)*3),6px)] bg-[#00A859]" />
+      <span>You</span>
+      <span title="Cards in hand">🂠{me.hand.length}</span>
+      <span title="Duit coins">🪙{me.duit}</span>
+      <span title="Habuan">🏆{me.habuan.length}</span>
+      {!compact && <span className="text-kopi/60">Total {me.total}</span>}
+      {active && <span className="blink bg-[#00A859] px-1 text-white">Your turn</span>}
     </div>
   )
 }
 
 function ActionBar() {
-  const { state, can, jual, cilok, pass, selectionCheck, selected, clearSelection, setCilokPreview, highlights, tutorial } = useGame()
+  const { state, can, jual, cilok, cilokMode, pass, selectionCheck, selected, highlights, tutorial } = useGame()
   const { settings, update } = useSettings()
   const me = state.players[0]
   if (!me || state.status !== 'playing') return null
   const myTurn = state.turn === 0
   const target = (id: ActionId) => highlights.some((h) => h.kind === 'button' && h.id === id)
-  const steal = cilokResult(state.gerai)
   const current = state.players[state.turn]
+  const ends = { low: cilokResult(state.gerai, 'low')?.card, high: cilokResult(state.gerai, 'high')?.card }
 
   let hint: string
   if (!myTurn) hint = `${current.name} is thinking…`
-  else if (state.subPhase === 'afterCilok') hint = selected.length ? selectionCheck.reason : 'Stamp used! Now JUAL something that beats the Gerai, or LALU.'
+  else if (cilokMode) hint = `Tap an end of the Gerai: ← ${ends.low?.value ?? ''} or ${ends.high?.value ?? ''} →`
+  else if (state.subPhase === 'afterCilok') hint = selected.length ? selectionCheck.reason : 'Stamped! Now JUAL something that beats the Gerai, or LALU.'
   else if (selected.length) hint = selectionCheck.reason
   else if (!state.gerai.cards.length) hint = 'Your Gerai to open: tap dishes, then JUAL any shape.'
-  else hint = 'Beat the Gerai, CILOK a dish, or LALU.'
-
-  const hintTone = myTurn && selected.length ? (selectionCheck.ok ? 'text-hijau' : 'text-sambal') : 'text-kopi/75'
+  else hint = 'Beat the Gerai, CILOK an end dish, or LALU.'
+  const hintTone = myTurn && selected.length && !cilokMode ? (selectionCheck.ok ? 'text-[#00A859]' : 'text-[#C8352B]') : 'text-kopi'
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 p-3 sm:p-4">
-      <div className="flex w-full max-w-4xl items-end justify-between gap-2">
-        <div className="pointer-events-auto hidden sm:block">
-          <PlayerPanel />
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex flex-col items-center justify-end gap-[max(calc(var(--s)*1.5),4px)] px-2 pb-[max(calc(var(--s)*2),5px)]"
+      style={{ height: 'var(--action-h)' }}
+    >
+      <div className="flex w-full max-w-[min(100%,980px)] items-center justify-center gap-2">
+        <div className="pointer-events-auto hidden [html[data-layout=landscape]_&]:block">
+          <PlayerStats />
         </div>
-        <div className={`pointer-events-auto rounded-full bg-kertas/95 px-4 py-1.5 text-center text-xs font-bold shadow-lg sm:text-sm ${hintTone}`}>{hint}</div>
-        <div className="pointer-events-auto hidden gap-2 sm:flex">
-          <button
-            className="btn btn-ghost !px-3 !text-[11px]"
-            onClick={() => {
-              click()
-              update({ sortMode: settings.sortMode === 'value' ? 'group' : 'value' })
-            }}
-            title="Change how your hand is sorted"
-          >
-            Sort: {settings.sortMode === 'value' ? 'Number' : 'Group'}
-          </button>
-          {selected.length > 0 && (
-            <button className="btn btn-ghost !px-3 !text-[11px]" onClick={clearSelection}>
-              Clear
-            </button>
-          )}
+        <div className={`px-panel pointer-events-auto px-text truncate !leading-tight ${hintTone}`} style={{ padding: 'max(calc(var(--s)*1),3px) max(calc(var(--s)*3),8px)' }}>
+          {hint}
         </div>
+        <button
+          className="px-btn btn-ghost pointer-events-auto !px-2 !text-[max(calc(var(--s)*4),9px)] [html[data-layout=portrait]_&]:hidden"
+          onClick={() => (click(), update({ sortMode: settings.sortMode === 'value' ? 'group' : 'value' }))}
+          title="Change how your hand is sorted"
+        >
+          Sort: {settings.sortMode === 'value' ? '1-10' : 'Group'}
+        </button>
       </div>
-      <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-        <button className={`btn btn-jual min-w-[96px] py-3 text-base ${target('jual') ? 'tut-target' : ''}`} disabled={!can.jual} onClick={jual}>
-          JUAL
+      <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-[max(calc(var(--s)*2),6px)]">
+        <button className={`px-btn btn-jual ${target('jual') ? 'tut-target' : ''}`} disabled={!can.jual} onClick={jual}>
+          Jual
         </button>
         <button
-          className={`btn btn-cilok min-w-[96px] py-3 text-base ${target('cilok') ? 'tut-target' : ''}`}
+          className={`px-btn btn-cilok ${target('cilok') ? 'tut-target' : ''} ${cilokMode && !cilokMode.stamp ? 'armed' : ''}`}
+          data-armed={!!cilokMode && !cilokMode.stamp}
           disabled={!can.cilok}
           onClick={() => cilok(false)}
-          onPointerEnter={() => setCilokPreview(true)}
-          onPointerLeave={() => setCilokPreview(false)}
-          title={steal ? `Snatch the ${steal.card.value} (${steal.card.dish})` : 'Needs a rival Gerai with 2+ dishes'}
+          title="Snatch an end dish from a rival's Gerai"
         >
-          CILOK!
+          {cilokMode && !cilokMode.stamp ? 'Cancel' : 'Cilok!'}
         </button>
         <button
-          className={`btn btn-stamp py-3 ${target('stamp') ? 'tut-target' : ''}`}
+          className={`px-btn btn-stamp ${target('stamp') ? 'tut-target' : ''} ${cilokMode?.stamp ? 'armed' : ''}`}
+          data-armed={!!cilokMode?.stamp}
           disabled={!can.stamp}
           onClick={() => cilok(true)}
-          onPointerEnter={() => setCilokPreview(true)}
-          onPointerLeave={() => setCilokPreview(false)}
           title="Once per round: CILOK then JUAL in the same turn"
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-            <rect x="4" y="14" width="16" height="5" rx="1" />
-            <rect x="10" y="5" width="4" height="9" />
-            <circle cx="12" cy="5" r="3" />
-          </svg>
-          {me.stampUsed ? 'Stamp used' : 'CILOK & JUAL'}
+          {cilokMode?.stamp ? 'Cancel' : me.stampUsed ? 'Stamp used' : 'Cilok & Jual'}
         </button>
-        <button className={`btn btn-plain py-3 ${target('pass') ? 'tut-target' : ''}`} disabled={!can.pass} onClick={pass}>
-          LALU
+        <button className={`px-btn btn-plain ${target('pass') ? 'tut-target' : ''}`} disabled={!can.pass} onClick={pass}>
+          Lalu
         </button>
       </div>
       {!tutorial.active && (
-        <div className="pointer-events-auto sm:hidden">
-          <PlayerPanel />
+        <div className="pointer-events-auto hidden [html[data-layout=portrait]_&]:block">
+          <PlayerStats compact />
         </div>
       )}
     </div>
@@ -199,19 +167,19 @@ function PauseMenu() {
   const { setOverlay, quitToMenu } = useGame()
   return (
     <Modal onClose={() => setOverlay('none')}>
-      <h2 className="text-center font-display text-3xl text-sambal">Rehat Sekejap</h2>
-      <p className="mt-1 text-center text-sm text-kopi/70">The market waits for you.</p>
-      <div className="mt-6 flex flex-col gap-3">
-        <button className="btn btn-jual py-3" onClick={() => (click(), setOverlay('none'))}>
+      <h2 className="px-title text-center">Rehat Sekejap</h2>
+      <p className="px-text mt-1 text-center text-kopi/70">The market waits for you.</p>
+      <div className="mt-5 flex flex-col gap-3">
+        <button className="px-btn btn-jual" onClick={() => (click(), setOverlay('none'))}>
           Resume
         </button>
-        <button className="btn btn-plain border-2 border-kopi/15" onClick={() => (click(), setOverlay('howto'))}>
+        <button className="px-btn btn-plain" onClick={() => (click(), setOverlay('howto'))}>
           How to Play
         </button>
-        <button className="btn btn-plain border-2 border-kopi/15" onClick={() => (click(), setOverlay('settings'))}>
+        <button className="px-btn btn-plain" onClick={() => (click(), setOverlay('settings'))}>
           Settings
         </button>
-        <button className="btn btn-cilok" onClick={() => (click(), quitToMenu())}>
+        <button className="px-btn btn-cilok" onClick={() => (click(), quitToMenu())}>
           Quit to Main Menu
         </button>
       </div>
@@ -219,61 +187,62 @@ function PauseMenu() {
   )
 }
 
-function useCountUp(target: number, delay: number) {
+/** Score digits tick up one step at a time, like an arcade tally. */
+function Tally({ value, delay, className }: { value: number; delay: number; className?: string }) {
   const [v, setV] = useState(0)
   useEffect(() => {
-    let raf = 0
-    const start = performance.now() + delay
-    const from = 0
-    const tick = (now: number) => {
-      const t = Math.min(Math.max((now - start) / 700, 0), 1)
-      setV(Math.round(from + (target - from) * (1 - Math.pow(1 - t, 3))))
-      if (t < 1) raf = requestAnimationFrame(tick)
+    let n = 0
+    const step = value >= 0 ? 1 : -1
+    let id = 0
+    const start = window.setTimeout(() => {
+      id = window.setInterval(() => {
+        if (n === value) return window.clearInterval(id)
+        n += step
+        setV(n)
+        audio.play('select')
+      }, 45)
+    }, delay)
+    return () => {
+      window.clearTimeout(start)
+      window.clearInterval(id)
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, delay])
-  return v
-}
-
-function Num({ value, delay, className }: { value: number; delay: number; className?: string }) {
-  const v = useCountUp(value, delay)
-  return <span className={`count-up ${className ?? ''}`}>{v}</span>
+  }, [value, delay])
+  return <span className={`tabular-nums ${className ?? ''}`}>{v}</span>
 }
 
 export function Settlement() {
   const { state, nextRound, quitToMenu, startGame, startTutorial } = useGame()
   if (state.status !== 'roundEnd' && state.status !== 'gameOver') return null
-  const over = state.status === 'gameOver'
   const ranked = [...state.players].sort((a, b) => b.total - a.total)
   const roundWinner = state.players[state.lastWinner ?? 0]
+  const cell = 'px-2 py-1.5 text-center font-pixel text-[max(calc(var(--s)*5),11px)]'
 
-  if (over) {
+  if (state.status === 'gameOver') {
     const champ = ranked[0]
     return (
       <Modal wide>
-        <p className="text-center text-xs font-extrabold uppercase tracking-[0.3em] text-kopi/50">Pasar dah tutup</p>
-        <h2 className="mt-1 text-center font-display text-4xl text-sambal">{champ.isHuman ? 'You are' : `${champ.name} is`} Raja Pasar Malam!</h2>
-        <ol className="mt-6 space-y-2">
+        <p className="px-label text-center">Pasar dah tutup</p>
+        <h2 className="px-title mt-1 text-center">{champ.isHuman ? 'You are' : `${champ.name} is`} Raja Pasar Malam!</h2>
+        <ol className="mt-5 space-y-2">
           {ranked.map((p, i) => (
-            <li key={p.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 ${i === 0 ? 'bg-kunyit/30' : 'bg-kopi/5'}`}>
-              <span className="font-display text-2xl text-kopi/60">{i + 1}</span>
-              <span className="inline-block h-3 w-3 rounded-full" style={{ background: PERSONAS[p.persona].accent }} />
-              <span className="flex-1 font-retro text-lg font-extrabold">{p.isHuman ? 'You' : p.name}</span>
-              <span className="text-xs text-kopi/60">{p.roundScores.map((r) => (r.score >= 0 ? `+${r.score}` : r.score)).join(' · ')}</span>
-              <Num value={p.total} delay={200 + i * 150} className="w-12 text-right font-display text-2xl" />
+            <li key={p.id} className={`flex items-center gap-3 border-[length:var(--u)] border-[#1A0F14] px-3 py-2 ${i === 0 ? 'bg-[#F4B42A]/40' : 'bg-kopi/5'}`}>
+              <span className="font-pixel text-[max(calc(var(--s)*7),15px)] text-kopi/60">{i + 1}</span>
+              <span className="inline-block h-3 w-3" style={{ background: PERSONAS[p.persona].accent }} />
+              <span className="flex-1 font-pixel text-[max(calc(var(--s)*5.5),12px)] uppercase">{p.isHuman ? 'You' : p.name}</span>
+              <span className="px-text text-kopi/60">{p.roundScores.map((r) => (r.score >= 0 ? `+${r.score}` : r.score)).join(' · ')}</span>
+              <Tally value={p.total} delay={300 + i * 250} className="w-12 text-right font-pixel text-[max(calc(var(--s)*7),15px)]" />
             </li>
           ))}
         </ol>
-        <div className="mt-7 flex gap-3">
-          <button className="btn btn-plain flex-1 border-2 border-kopi/15" onClick={() => (click(), quitToMenu())}>
+        <div className="mt-6 flex gap-3">
+          <button className="px-btn btn-plain flex-1" onClick={() => (click(), quitToMenu())}>
             Main Menu
           </button>
           <button
-            className="btn btn-jual flex-[2] py-3"
+            className="px-btn btn-jual flex-[2]"
             onClick={() => (click(), startGame({ numPlayers: state.players.length, difficulty: state.difficulty, totalRounds: state.totalRounds }))}
           >
-            Main Lagi! (Play again)
+            Main Lagi!
           </button>
         </div>
       </Modal>
@@ -282,21 +251,19 @@ export function Settlement() {
 
   return (
     <Modal wide>
-      <p className="text-center text-xs font-extrabold uppercase tracking-[0.3em] text-kopi/50">
-        {state.tutorial ? 'Tutorial complete' : `Pusingan ${state.round} selesai`}
+      <p className="px-label text-center">{state.tutorial ? 'Tutorial complete' : `Pusingan ${state.round} selesai`}</p>
+      <h2 className="px-title mt-1 text-center">{roundWinner.isHuman ? 'You cleared your stall!' : `${roundWinner.name} cleared the stall!`}</h2>
+      <p className="mx-auto mt-3 w-fit border-[length:var(--u)] border-[#1A0F14] bg-kopi px-3 py-1 text-center font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kertas">
+        Score = <span className="text-[#3CE08A]">Habuan</span> + <span className="text-[#F4B42A]">Duit</span> − <span className="text-[#FF6A5A]">Hand</span>
       </p>
-      <h2 className="mt-1 text-center font-display text-3xl text-sambal">{roundWinner.isHuman ? 'You cleared your stall!' : `${roundWinner.name} cleared the stall!`}</h2>
-      <p className="mx-auto mt-3 w-fit rounded-full bg-kopi px-4 py-1.5 text-center text-sm font-bold text-kunyit">
-        Score = <span className="text-hijau">Habuan</span> + <span className="text-kunyit">Duit</span> − <span className="text-sambal">Hand</span>
-      </p>
-      <div className="mt-5 overflow-x-auto">
-        <table className="w-full min-w-[440px] text-sm">
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[420px] border-collapse">
           <thead>
-            <tr className="text-[11px] uppercase tracking-wider text-kopi/55">
-              <th className="py-2 text-left">Hawker</th>
-              <th>🏆 Habuan</th>
-              <th>🪙 Duit</th>
-              <th>🂠 Hand</th>
+            <tr className="px-label">
+              <th className="px-2 py-1 text-left">Hawker</th>
+              <th>Habuan</th>
+              <th>Duit</th>
+              <th>Hand</th>
               <th>Round</th>
               <th>Total</th>
             </tr>
@@ -304,26 +271,20 @@ export function Settlement() {
           <tbody>
             {state.players.map((p, i) => {
               const rs = p.roundScores[p.roundScores.length - 1]
-              const d = 150 + i * 180
+              const d = 200 + i * 400
               return (
-                <tr key={p.id} className={`border-t border-kopi/10 ${p.id === state.lastWinner ? 'bg-hijau/10' : ''}`}>
-                  <td className="py-2.5 font-retro font-extrabold">
-                    <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: PERSONAS[p.persona].accent }} />
+                <tr key={p.id} className={`border-t-[length:var(--u)] border-dashed border-kopi/25 ${p.id === state.lastWinner ? 'bg-[#00A859]/15' : ''}`}>
+                  <td className="px-2 py-1.5 font-pixel text-[max(calc(var(--s)*5),11px)] uppercase">
+                    <span className="mr-2 inline-block h-2.5 w-2.5" style={{ background: PERSONAS[p.persona].accent }} />
                     {p.isHuman ? 'You' : p.name}
                   </td>
-                  <td className="text-center font-bold text-hijau">
-                    +<Num value={rs.habuan} delay={d} />
+                  <td className={`${cell} text-[#00A859]`}>
+                    +<Tally value={rs.habuan} delay={d} />
                   </td>
-                  <td className="text-center font-bold text-[#B8740E]">
-                    +<Num value={rs.duit} delay={d + 100} />
-                  </td>
-                  <td className="text-center font-bold text-sambal">
-                    −<Num value={rs.hand} delay={d + 200} />
-                  </td>
-                  <td className="text-center font-display text-lg">{rs.score >= 0 ? `+${rs.score}` : rs.score}</td>
-                  <td className="text-center font-display text-lg">
-                    <Num value={p.total} delay={d + 400} />
-                  </td>
+                  <td className={`${cell} text-[#B8740E]`}>+{rs.duit}</td>
+                  <td className={`${cell} text-[#C8352B]`}>−{rs.hand}</td>
+                  <td className={cell}>{rs.score >= 0 ? `+${rs.score}` : rs.score}</td>
+                  <td className={cell}>{p.total}</td>
                 </tr>
               )
             })}
@@ -332,20 +293,20 @@ export function Settlement() {
       </div>
       {state.tutorial ? (
         <>
-          <p className="mt-5 text-center text-sm text-kopi/80">
-            Every Habuan card and DUIT coin is +1, every dish stuck in your hand is −1. In a full game you play several rounds and the highest total wins.
+          <p className="px-text mt-4 text-center text-kopi/80">
+            Every Habuan card and DUIT coin is +1, every dish stuck in your hand is −1. A full game runs several rounds and the highest total wins.
           </p>
-          <div className="mt-6 flex gap-3">
-            <button className="btn btn-plain flex-1 border-2 border-kopi/15" onClick={() => (click(), startTutorial())}>
-              Replay tutorial
+          <div className="mt-5 flex gap-3">
+            <button className="px-btn btn-plain flex-1" onClick={() => (click(), startTutorial())}>
+              Replay
             </button>
-            <button className="btn btn-plain flex-1 border-2 border-kopi/15" onClick={() => (click(), quitToMenu())}>
+            <button className="px-btn btn-jual flex-1" onClick={() => (click(), quitToMenu())}>
               Main Menu
             </button>
           </div>
         </>
       ) : (
-        <button className="btn btn-jual mt-6 w-full py-3.5 text-base" onClick={nextRound}>
+        <button className="px-btn btn-jual mt-5 w-full" onClick={nextRound}>
           {state.round >= state.totalRounds ? 'Final Results' : 'Next Round'}
         </button>
       )}
@@ -358,29 +319,31 @@ export function TutorialPanel() {
   if (!tutorial.active || !tutorial.step || state.status !== 'playing') return null
   const { step, index, total } = tutorial
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[7.4rem] z-30 flex justify-center px-3 sm:left-auto sm:right-4 sm:top-20 sm:w-[380px] sm:px-0">
-      <div key={index} className="panel banner-in pointer-events-auto w-full max-w-md p-4">
+    <div className="pointer-events-none fixed inset-x-0 top-[max(calc(var(--s)*16),40px)] z-30 flex justify-center px-2 [html[data-layout=landscape]_&]:right-auto [html[data-layout=landscape]_&]:left-[max(calc(var(--s)*3),6px)] [html[data-layout=landscape]_&]:w-[max(calc(var(--s)*150),300px)] [html[data-layout=landscape]_&]:px-0">
+      <div key={index} className="px-panel pop-in pointer-events-auto w-full max-w-[460px] p-[max(calc(var(--s)*4),10px)]">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-kopi/50">
-            Step {index + 1} / {total}
+          <span className="px-label">
+            Step {index + 1}/{total}
           </span>
-          <button className="text-[11px] font-bold uppercase text-kopi/50 underline" onClick={() => (click(), quitToMenu())}>
-            Skip tutorial
+          <button className="px-label underline" onClick={() => (click(), quitToMenu())}>
+            Skip
           </button>
         </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-kopi/10">
-          <div className="h-full rounded-full bg-hijau transition-all" style={{ width: `${((index + 1) / total) * 100}%` }} />
+        <div className="mt-1 flex gap-[2px]">
+          {Array.from({ length: total }, (_, i) => (
+            <span key={i} className={`h-[max(calc(var(--s)*1.5),4px)] flex-1 ${i <= index ? 'bg-[#00A859]' : 'bg-kopi/15'}`} />
+          ))}
         </div>
-        <h3 className="mt-3 font-display text-xl text-sambal">{step.title}</h3>
-        <p className="mt-1 text-sm leading-relaxed text-kopi/90">{step.text}</p>
-        <div className="mt-3 flex justify-end">
+        <h3 className="mt-2 font-pixel text-[max(calc(var(--s)*6),13px)] uppercase text-[#C8352B]">{step.title}</h3>
+        <p className="px-text mt-1 text-kopi/90">{step.text}</p>
+        <div className="mt-2 flex justify-end">
           {step.kind === 'info' && (
-            <button className="btn btn-jual" onClick={tutorial.next}>
-              Next →
+            <button className="px-btn btn-jual" onClick={tutorial.next}>
+              Next ►
             </button>
           )}
-          {step.kind === 'do' && <span className="rounded-full bg-hijau/15 px-3 py-1 text-xs font-extrabold uppercase text-hijau">Your move</span>}
-          {step.kind === 'ai' && <span className="animate-pulse rounded-full bg-kopi/10 px-3 py-1 text-xs font-extrabold uppercase text-kopi/60">Watch Uncle…</span>}
+          {step.kind === 'do' && <span className="blink font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-[#00A859]">► Your move</span>}
+          {step.kind === 'ai' && <span className="blink font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kopi/60">Watch Uncle…</span>}
         </div>
       </div>
     </div>
@@ -388,15 +351,26 @@ export function TutorialPanel() {
 }
 
 export function GameHUD() {
-  const { overlay, setOverlay, jual, cilok, pass, state, tutorial } = useGame()
+  const { overlay, setOverlay, jual, cilok, cilokMode, cancelCilok, chooseEnd, pass, state, tutorial } = useGame()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setOverlay(overlay === 'none' ? 'pause' : 'none')
+        if (cilokMode) {
+          cancelCilok()
+          audio.play('cancel')
+        } else setOverlay(overlay === 'none' ? 'pause' : 'none')
         return
       }
       if (overlay !== 'none' || state.status !== 'playing') return
+      if (cilokMode && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        chooseEnd(e.key === 'ArrowLeft' ? 'low' : 'high')
+        return
+      }
+      if (tutorial.active && tutorial.step?.kind === 'info' && (e.key === 'Enter' || e.key === ' ')) {
+        tutorial.next()
+        return
+      }
       const k = e.key.toLowerCase()
       if (k === 'j') jual()
       else if (k === 'c') cilok(false)

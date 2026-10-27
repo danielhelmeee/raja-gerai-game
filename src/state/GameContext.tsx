@@ -5,7 +5,7 @@ import { describe, type Tone } from '../game/describe'
 import { canCilok, canPass, gameReducer, initialState } from '../game/engine'
 import { checkJual, type JualCheck } from '../game/rules'
 import { TUTORIAL_STEPS, type Highlight, type TutAction, type TutorialStep } from '../game/tutorial'
-import type { GameConfig, GameState } from '../game/types'
+import type { End, GameConfig, GameState } from '../game/types'
 import { useSettings } from './settings'
 
 export type Screen = 'menu' | 'setup' | 'game'
@@ -30,7 +30,11 @@ interface GameCtx {
   selectionCheck: JualCheck
   can: Record<ActionId, boolean>
   jual: () => void
+  /** CILOK is two steps: arm it with the button, then pick an end of the Gerai. */
   cilok: (stamp: boolean) => void
+  cilokMode: { stamp: boolean } | null
+  chooseEnd: (end: End) => void
+  cancelCilok: () => void
   pass: () => void
   startGame: (config: GameConfig) => void
   startTutorial: () => void
@@ -39,22 +43,11 @@ interface GameCtx {
   tutorial: { active: boolean; index: number; step: TutorialStep | null; total: number; next: () => void }
   highlights: Highlight[]
   messages: Message[]
-  cilokPreview: boolean
-  setCilokPreview: (v: boolean) => void
 }
 
 const Ctx = createContext<GameCtx | null>(null)
 
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id))
-
-function matchesTutorial(step: TutorialStep | null, action: TutAction): boolean {
-  if (!step || step.kind !== 'do' || !step.action) return false
-  const want = step.action
-  if (want.type !== action.type) return false
-  if (want.type === 'jual' && action.type === 'jual') return sameSet(want.cardIds, action.cardIds)
-  if (want.type === 'cilok' && action.type === 'cilok') return want.stamp === action.stamp
-  return true
-}
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const { settings } = useSettings()
@@ -64,7 +57,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [selected, setSelected] = useState<string[]>([])
   const [tutIndex, setTutIndex] = useState(0)
   const [messages, setMessages] = useState<Message[]>([])
-  const [cilokPreview, setCilokPreview] = useState(false)
+  const [cilokMode, setCilokMode] = useState<{ stamp: boolean } | null>(null)
   const lastSeq = useRef(state.seq)
   const msgId = useRef(0)
 
@@ -72,11 +65,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const myTurn = state.status === 'playing' && state.turn === 0 && screen === 'game'
   const tutStep = state.tutorial && tutIndex < TUTORIAL_STEPS.length ? TUTORIAL_STEPS[tutIndex] : null
 
-  // Drop selected cards that have left the hand.
+  // Drop selected cards that have left the hand; cancel a CILOK once it's no longer possible.
   useEffect(() => {
     if (!human) return
     setSelected((sel) => sel.filter((id) => human.hand.some((c) => c.id === id)))
   }, [human])
+  useEffect(() => {
+    if (cilokMode && !canCilok(state, 0, cilokMode.stamp)) setCilokMode(null)
+  }, [state, cilokMode])
 
   // Events → sound effects and telemetry banners.
   useEffect(() => {
@@ -87,15 +83,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     for (const e of fresh) {
       switch (e.type) {
         case 'deal':
-          for (let i = 0; i < 8; i++) audio.play('slide', 0.2 + i * 0.11)
+          audio.play('deal')
           break
         case 'jual':
-          audio.play('jual', 0.15)
-          if (e.pusing !== null) audio.play('pusing', 0.45)
+          audio.play('jual', 0.1)
           break
         case 'cilok':
           audio.play('cilok')
-          audio.play('coin', 0.6)
+          audio.play('coin', 0.75)
           break
         case 'pass':
           audio.play('pass')
@@ -104,25 +99,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
           audio.play('collect', 0.25)
           break
         case 'roundEnd':
-          audio.play('gong', 0.5)
+          audio.play('gong', 0.4)
           break
         case 'gameOver':
-          audio.play('bell')
-          audio.play('gong', 0.3)
+          audio.play('fanfare')
           break
       }
+      if (e.type === 'deal' && state.players[e.starter]?.isHuman) audio.play('turn', 1.6)
       const line = describe(e, state.players)
       if (line) add.push({ id: ++msgId.current, ...line })
-      if (e.type === 'jual' && e.pusing !== null) {
-        add.push({
-          id: ++msgId.current,
-          text: e.pusing ? 'PUSING! Lower numbers now beat higher ones' : 'PUSING flipped back: higher numbers win again',
-          tone: 'pusing',
-        })
-      }
     }
     setMessages((m) => [...m, ...add].slice(-30))
   }, [state.seq, state.events, state.players])
+
+  // A soft chime when the turn comes back to you.
+  const prevTurn = useRef(state.turn)
+  useEffect(() => {
+    if (state.status === 'playing' && state.turn === 0 && prevTurn.current !== 0) audio.play('turn', 0.3)
+    prevTurn.current = state.turn
+  }, [state.turn, state.status])
 
   // AI hawkers take their turns.
   useEffect(() => {
@@ -130,7 +125,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const p = state.players[state.turn]
     if (!p || p.isHuman) return
     const last = state.events[state.events.length - 1]
-    const extra = last?.type === 'deal' ? 1600 : last?.type === 'collect' ? 700 : 0
+    const extra = last?.type === 'deal' ? 2200 : last?.type === 'collect' ? 700 : 0
     const delay = 950 + Math.random() * 650 + extra + (state.subPhase === 'afterCilok' ? 300 : 0)
     const id = window.setTimeout(() => dispatch(decide(state, state.turn)), delay)
     return () => window.clearTimeout(id)
@@ -143,30 +138,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const id = window.setTimeout(() => {
       dispatch(
         a.type === 'jual'
-          ? { type: 'JUAL', playerId: 1, cardIds: a.cardIds }
+          ? { type: 'JUAL', playerId: 1, cardIds: a.cardIds === 'rest' ? state.players[1].hand.map((c) => c.id) : a.cardIds }
           : a.type === 'cilok'
-            ? { type: 'CILOK', playerId: 1, stamp: a.stamp }
+            ? { type: 'CILOK', playerId: 1, stamp: a.stamp, end: a.end ?? 'high' }
             : { type: 'PASS', playerId: 1 },
       )
       setTutIndex((i) => i + 1)
     }, 1500)
     return () => window.clearTimeout(id)
-  }, [state.tutorial, screen, tutStep, overlay])
+  }, [state.tutorial, state.players, screen, tutStep, overlay])
 
-  const selectedCards = useMemo(
-    () => (human ? human.hand.filter((c) => selected.includes(c.id)) : []),
-    [human, selected],
-  )
-  const selectionCheck = useMemo(
-    () => checkJual(selectedCards, state.gerai, state.pusing),
-    [selectedCards, state.gerai, state.pusing],
-  )
+  const selectedCards = useMemo(() => (human ? human.hand.filter((c) => selected.includes(c.id)) : []), [human, selected])
+  const selectionCheck = useMemo(() => checkJual(selectedCards, state.gerai), [selectedCards, state.gerai])
 
   const tutAllows = (id: ActionId) => {
     if (!state.tutorial) return true
     if (!tutStep || tutStep.kind !== 'do' || !tutStep.action) return false
     const a = tutStep.action
-    return (id === 'jual' && a.type === 'jual') || (id === 'pass' && a.type === 'pass') || (id === 'cilok' && a.type === 'cilok' && !a.stamp) || (id === 'stamp' && a.type === 'cilok' && a.stamp)
+    return (
+      (id === 'jual' && a.type === 'jual') ||
+      (id === 'pass' && a.type === 'pass') ||
+      (id === 'cilok' && a.type === 'cilok' && !a.stamp) ||
+      (id === 'stamp' && a.type === 'cilok' && a.stamp)
+    )
+  }
+
+  const matchesTutorial = (action: TutAction): boolean => {
+    if (!tutStep || tutStep.kind !== 'do' || !tutStep.action) return false
+    const want = tutStep.action
+    if (want.type !== action.type) return false
+    if (want.type === 'jual' && action.type === 'jual') {
+      const ids = want.cardIds === 'rest' ? human.hand.map((c) => c.id) : want.cardIds
+      return sameSet(ids, action.cardIds as string[])
+    }
+    if (want.type === 'cilok' && action.type === 'cilok') return want.stamp === action.stamp && (!want.end || want.end === action.end)
+    return true
   }
 
   const can: Record<ActionId, boolean> = {
@@ -180,7 +186,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       if (state.tutorial) {
         const a = tutStep?.action
-        if (!tutStep || tutStep.kind !== 'do' || a?.type !== 'jual' || !a.cardIds.includes(id)) {
+        const allowed = a?.type === 'jual' && (a.cardIds === 'rest' || a.cardIds.includes(id))
+        if (!tutStep || tutStep.kind !== 'do' || !allowed) {
           audio.play('error')
           return
         }
@@ -193,14 +200,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const runHuman = (tut: TutAction, run: () => void) => {
     if (state.tutorial) {
-      if (!matchesTutorial(tutStep, tut)) {
+      if (!matchesTutorial(tut)) {
         audio.play('error')
-        return
+        return false
       }
       setTutIndex((i) => i + 1)
     }
-    audio.play('ui')
     run()
+    return true
   }
 
   const jual = () => {
@@ -213,13 +220,29 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const cilok = (stamp: boolean) => {
     if (!(stamp ? can.stamp : can.cilok)) return audio.play('error')
-    runHuman({ type: 'cilok', stamp }, () => dispatch({ type: 'CILOK', playerId: 0, stamp }))
-    setCilokPreview(false)
+    if (cilokMode && cilokMode.stamp === stamp) {
+      setCilokMode(null)
+      audio.play('cancel')
+      return
+    }
+    audio.play('arm')
+    setCilokMode({ stamp })
+  }
+
+  const chooseEnd = (end: End) => {
+    if (!cilokMode) return
+    const { stamp } = cilokMode
+    const ok = runHuman({ type: 'cilok', stamp, end }, () => {
+      dispatch({ type: 'CILOK', playerId: 0, stamp, end })
+      setCilokMode(null)
+    })
+    if (!ok) setCilokMode(cilokMode)
   }
 
   const pass = () => {
     if (!can.pass) return audio.play('error')
     runHuman({ type: 'pass' }, () => {
+      audio.play('ui')
       dispatch({ type: 'PASS', playerId: 0 })
       setSelected([])
     })
@@ -229,6 +252,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setSelected([])
     setMessages([])
     setTutIndex(0)
+    setCilokMode(null)
     dispatch({ type: 'NEW_GAME', config })
     setScreen('game')
     setOverlay('none')
@@ -236,9 +260,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const highlights = useMemo<Highlight[]>(() => {
     if (!tutStep || tutStep.kind === 'ai') return []
-    // Only light up the action's cards that are still unselected; then the button.
     return tutStep.highlight ?? []
   }, [tutStep])
+
+  // Dev-only handle so automated browser checks can drive the game.
+  if (import.meta.env.DEV) {
+    ;(window as unknown as { __cilok: unknown }).__cilok = {
+      toggleSelect,
+      chooseEnd,
+      state,
+      tutIndex,
+      cilokMode,
+      autoplay: () => state.status === 'playing' && state.turn === 0 && dispatch(decide(state, 0)),
+    }
+  }
 
   const value: GameCtx = {
     state,
@@ -253,6 +288,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     can,
     jual,
     cilok,
+    cilokMode,
+    chooseEnd,
+    cancelCilok: () => setCilokMode(null),
     pass,
     startGame,
     startTutorial: () => startGame({ numPlayers: 2, difficulty: settings.difficulty, totalRounds: 1, tutorial: true }),
@@ -264,6 +302,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'RESET' })
       setSelected([])
       setMessages([])
+      setCilokMode(null)
       setScreen('menu')
       setOverlay('none')
     },
@@ -281,18 +320,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     },
     highlights,
     messages,
-    cilokPreview,
-    setCilokPreview,
-  }
-
-  // Dev-only handle so automated browser checks can tap 3D cards by id.
-  if (import.meta.env.DEV) {
-    ;(window as unknown as { __cilok: unknown }).__cilok = {
-      toggleSelect,
-      state,
-      tutIndex,
-      autoplay: () => state.status === 'playing' && state.turn === 0 && dispatch(decide(state, 0)),
-    }
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
