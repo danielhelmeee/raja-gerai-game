@@ -23,7 +23,7 @@ export const PERSONAS: Record<PersonaId, Persona> = {
   ahseng: {
     id: 'ahseng',
     name: 'Uncle Ah Seng',
-    stall: 'Kopitiam Ah Seng',
+    stall: 'Kedai Kopi Ah Seng',
     accent: '#3B6FB6',
     lines: {
       jual: ['Wah, steady lah!', 'Hot hot, come buy!', 'Uncle still got it!'],

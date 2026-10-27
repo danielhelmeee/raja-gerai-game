@@ -34,7 +34,7 @@ export function planPlays(hand: Card[]): number {
 
 /** How "strong" a play is, 0..1: spending strong plays early wastes control later. */
 function strength(p: Play): number {
-  if (p.shape.kind === 'five') return 0.55 + 0.1 * ['barisan', 'setmenu', 'kenduri', 'borong', 'diraja'].indexOf(p.shape.five!)
+  if (p.shape.kind === 'five') return 0.55 + 0.1 * ['barisan', 'tapau', 'kenduri', 'borong', 'tapaubarisan'].indexOf(p.shape.five!)
   const rank = p.shape.kind === 'triple' ? p.shape.key : Math.floor(p.shape.key / 4)
   return (rank - 3) / 12
 }

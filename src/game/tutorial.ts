@@ -2,12 +2,12 @@
  * Scripted one-round lesson at a full four-hawker table with fixed hands, so
  * every step happens exactly as described. Ids are `${group}-${rank}`.
  */
-const k = (r: number) => `kopitiam-${r}`
-const n = (r: number) => `nasi-${r}`
-const r = (rank: number) => `roti-${rank}`
-const b = (rank: number) => `kuih-${rank}`
+const k = (r: number) => `karipap-${r}`
+const n = (r: number) => `tehtarik-${r}`
+const r = (rank: number) => `ramly-${rank}`
+const b = (rank: number) => `nasilemak-${rank}`
 
-// Your hand: the Kopitiam 3, a pair of 9s, a Barisan 10-J-Q-K-A and a Kenduri (6s full of 3s).
+// Your hand: the Karipap 3, a pair of 9s, a Barisan 10-J-Q-K-A and a Kenduri (6s full of 3s).
 const YOU = [k(3), n(9), r(9), n(10), k(11), k(12), k(13), k(14), k(6), n(6), r(6), n(3), r(3)]
 const UNCLE = [r(8), n(12), r(12), k(4), n(5), b(6), k(7), n(8), n(4), r(4), n(7), r(7), k(8)]
 const LINA = [r(11), b(3), b(4), b(5), b(7), b(9), k(9), k(10), r(10), b(10), n(11), b(11), b(12)]
@@ -50,19 +50,19 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     kind: 'info',
     title: 'Card order',
-    text: '3 is the lowest card, then 4 up to 10, J, Q, K, A, and 2 is the highest. On equal numbers the food group decides: Kopitiam < Nasi < Roti < Kuih.',
+    text: '3 is the lowest card, then 4 up to 10, J, Q, K, A, and 2 is the highest. On equal numbers the suit decides: Karipap < Teh Tarik < Ramly Burger < Nasi Lemak.',
     highlight: [{ kind: 'hand' }],
   },
   {
     kind: 'info',
-    title: 'The Kopitiam 3 opens',
-    text: 'Whoever holds the Kopitiam 3 starts, and the first play must include it. That is you!',
+    title: 'The Karipap 3 opens',
+    text: 'Whoever holds the Karipap 3 starts, and the first play must include it. That is you!',
     highlight: [cards(k(3))],
   },
   {
     kind: 'do',
     title: 'Open the Gerai',
-    text: 'Tap the Kopitiam 3, then press JUAL to put it on the Gerai mat.',
+    text: 'Tap the Karipap 3, then press JUAL to put it on the Gerai mat.',
     action: { type: 'jual', cardIds: [k(3)] },
     highlight: [cards(k(3)), { kind: 'button', id: 'jual' }],
   },
@@ -76,7 +76,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     kind: 'do',
     title: 'Say LALU',
-    text: 'Only a higher 2 beats a Roti 2, and you have none. Press LALU to pass. You can still play later.',
+    text: 'Only a higher 2 beats a Ramly Burger 2, and you have none. Press LALU to pass. You can still play later.',
     action: { type: 'pass' },
     highlight: [{ kind: 'button', id: 'pass' }],
   },
@@ -116,7 +116,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     kind: 'info',
     title: 'Five-card hands',
-    text: 'Five-card hands only beat other five-card hands. From weakest: BARISAN (straight), SET MENU (5 of one food group), KENDURI (full house), BORONG (four of a kind + 1), HIDANGAN DIRAJA (straight flush).',
+    text: 'Five-card hands only beat other five-card hands. From weakest: BARISAN (straight), TAPAU (5 of one suit), KENDURI (full house), BORONG (four of a kind + 1), TAPAU BARISAN (straight flush). 10-J-Q-K-A of one suit is the HIDANGAN DIRAJA.',
     highlight: [{ kind: 'gerai' }],
   },
   {
@@ -128,14 +128,14 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     kind: 'ai',
-    title: 'Set Menu!',
-    text: 'Uncle passes, then Kak Lina plays a SET MENU: five Kuih dishes. Any Set Menu beats any Barisan.',
+    title: 'Tapau!',
+    text: 'Uncle passes, then Kak Lina plays a TAPAU: five Nasi Lemak. Any Tapau beats any Barisan.',
     moves: [pass(1), jual(2, b(3), b(4), b(5), b(7), b(9)), pass(3)],
   },
   {
     kind: 'do',
     title: 'Kenduri to finish',
-    text: 'A KENDURI beats a Set Menu, and it is your last five cards. Tap them all and JUAL to empty your hand and win the round!',
+    text: 'A KENDURI beats a Tapau, and it is your last five cards. Tap them all and JUAL to empty your hand and win the round!',
     action: { type: 'jual', cardIds: 'rest' },
     highlight: [{ kind: 'hand' }, { kind: 'button', id: 'jual' }],
   },

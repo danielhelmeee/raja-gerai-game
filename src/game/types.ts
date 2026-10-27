@@ -1,4 +1,5 @@
-export type Group = 'kopitiam' | 'nasi' | 'roti' | 'kuih'
+/** The four suits, lowest to highest (like ◆ ♣ ♥ ♠). */
+export type Group = 'karipap' | 'tehtarik' | 'ramly' | 'nasilemak'
 
 /** Dai Di ranks: 3–10, J=11, Q=12, K=13, A=14, and 2=15 (highest). */
 export interface Card {
@@ -10,7 +11,7 @@ export interface Card {
 
 export type Kind = 'single' | 'pair' | 'triple' | 'five'
 /** Five-card hands, weakest to strongest: straight, flush, full house, four of a kind + 1, straight flush. */
-export type FiveKind = 'barisan' | 'setmenu' | 'kenduri' | 'borong' | 'diraja'
+export type FiveKind = 'barisan' | 'tapau' | 'kenduri' | 'borong' | 'tapaubarisan'
 
 export interface Shape {
   kind: Kind
@@ -72,7 +73,7 @@ export interface GameState {
   /** Cards from GERAIs that have been beaten or cleared. */
   discard: Card[]
   turn: number
-  /** The match's very first play must include the Kopitiam 3. */
+  /** The match's very first play must include the Karipap 3. */
   opening: boolean
   round: number
   totalRounds: number

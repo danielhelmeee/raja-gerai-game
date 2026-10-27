@@ -1,22 +1,22 @@
 import { cardKey, GROUP_LABEL, GROUPS, OPENING_CARD, rankLabel, sortCards } from './cards'
 import type { Card, FiveKind, Gerai, Shape } from './types'
 
-export const FIVE_ORDER: FiveKind[] = ['barisan', 'setmenu', 'kenduri', 'borong', 'diraja']
+export const FIVE_ORDER: FiveKind[] = ['barisan', 'tapau', 'kenduri', 'borong', 'tapaubarisan']
 
 export const FIVE_NAME: Record<FiveKind, string> = {
   barisan: 'Barisan',
-  setmenu: 'Set Menu',
+  tapau: 'Tapau',
   kenduri: 'Kenduri',
   borong: 'Borong',
-  diraja: 'Hidangan Diraja',
+  tapaubarisan: 'Tapau Barisan',
 }
 
 export const FIVE_HINT: Record<FiveKind, string> = {
   barisan: 'straight',
-  setmenu: 'flush',
+  tapau: 'flush',
   kenduri: 'full house',
   borong: 'four of a kind + 1',
-  diraja: 'straight flush',
+  tapaubarisan: 'straight flush',
 }
 
 function rankCounts(cards: Card[]): Map<number, number> {
@@ -45,10 +45,10 @@ export function classify(cards: Card[]): Shape | null {
   const flush = cards.every((c) => c.group === cards[0].group)
   const straight = isStraight(cards)
   const counts = [...rankCounts(cards).entries()].sort((a, b) => b[1] - a[1])
-  if (straight && flush) return { kind: 'five', count: 5, five: 'diraja', key: top }
+  if (straight && flush) return { kind: 'five', count: 5, five: 'tapaubarisan', key: top }
   if (counts[0][1] === 4) return { kind: 'five', count: 5, five: 'borong', key: counts[0][0] }
   if (counts[0][1] === 3 && counts[1][1] === 2) return { kind: 'five', count: 5, five: 'kenduri', key: counts[0][0] }
-  if (flush) return { kind: 'five', count: 5, five: 'setmenu', key: top }
+  if (flush) return { kind: 'five', count: 5, five: 'tapau', key: top }
   if (straight) return { kind: 'five', count: 5, five: 'barisan', key: top }
   return null
 }
@@ -77,11 +77,15 @@ export function shapeName(s: Shape, cards?: Card[]): string {
       const name = FIVE_NAME[s.five!]
       if (s.five === 'kenduri') return `${name} (${rankLabel(s.key)}s full)`
       if (s.five === 'borong') return `${name} (four ${rankLabel(s.key)}s)`
-      if (s.five === 'setmenu') return `${name} (${cards?.length ? GROUP_LABEL[cards[0].group] : groupOfKey(s.key)})`
+      if (s.five === 'tapau') return `${name} (${cards?.length ? GROUP_LABEL[cards[0].group] : groupOfKey(s.key)})`
+      if (s.five === 'tapaubarisan') return `${isRoyal(s) ? 'Hidangan Diraja' : name} (${groupOfKey(s.key)})`
       return `${name} to ${rankLabel(Math.floor(s.key / 4))}`
     }
   }
 }
+
+/** 10-J-Q-K-A of one suit: the top Tapau Barisan, crowned Hidangan Diraja. */
+export const isRoyal = (s: Shape) => s.five === 'tapaubarisan' && Math.floor(s.key / 4) === 14
 
 export const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -101,7 +105,7 @@ export function checkJual(cards: Card[], gerai: Gerai, opening: boolean): JualCh
       reason: cards.length === 4 ? 'Four cards is not a hand: use 1, 2, 3 or 5' : 'Not a valid hand: single, pair, three, or a 5-card hand',
     }
   }
-  if (opening && !cards.some((c) => c.id === OPENING_CARD)) return { ok: false, shape, reason: 'The first play must include the Kopitiam 3' }
+  if (opening && !cards.some((c) => c.id === OPENING_CARD)) return { ok: false, shape, reason: 'The first play must include the Karipap 3' }
   if (!gerai.shape) return { ok: true, shape, reason: `Open with ${shapeName(shape, cards)}` }
   if (shape.count !== gerai.shape.count) return { ok: false, shape, reason: `Must be ${gerai.shape.count} card${gerai.shape.count > 1 ? 's' : ''}, like the Gerai` }
   if (beats(shape, gerai.shape)) return { ok: true, shape, reason: `${capitalise(shapeName(shape, cards))} beats the Gerai` }

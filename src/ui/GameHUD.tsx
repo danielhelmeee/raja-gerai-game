@@ -101,7 +101,7 @@ function ActionBar() {
   let hint: string
   if (!myTurn) hint = `${current.name} is thinking…`
   else if (selected.length) hint = selectionCheck.reason
-  else if (state.opening) hint = 'You hold the Kopitiam 3: open with a play that includes it.'
+  else if (state.opening) hint = 'You hold the Karipap 3: open with a play that includes it.'
   else if (!state.gerai.cards.length) hint = 'Your lead: play any single, pair, three or 5-card hand.'
   else hint = `Beat the Gerai with ${state.gerai.shape!.count} card${state.gerai.shape!.count > 1 ? 's' : ''}, or LALU.`
   const hintTone = myTurn && selected.length ? (selectionCheck.ok ? 'text-[#00A859]' : 'text-[#C8352B]') : 'text-kopi'

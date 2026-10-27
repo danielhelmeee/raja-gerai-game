@@ -59,7 +59,7 @@ function deal(state: GameState, round: number): GameState {
         return state.players.map((_, i) => deck.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE))
       })()
   const players = state.players.map((p, i) => ({ ...p, hand: sortCards(hands[i]) }))
-  // Round one opens with the Kopitiam 3; later rounds, the last winner leads anything.
+  // Round one opens with the Karipap 3; later rounds, the last winner leads anything.
   const opening = round === 1
   const starter = opening ? players.findIndex((p) => p.hand.some((c) => c.id === OPENING_CARD)) : (state.lastWinner ?? 0)
   const next: GameState = { ...state, status: 'playing', players, gerai: EMPTY_GERAI, discard: [], turn: starter, opening, round }

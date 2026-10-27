@@ -1,4 +1,4 @@
-import { ALL_CARDS, dishIndex, rankLabel } from '../game/cards'
+import { ALL_CARDS, GROUPS, RED_SUITS, rankLabel } from '../game/cards'
 import type { Card, Group, PersonaId } from '../game/types'
 import { Atlas } from './atlas'
 import { FONT_CHARS, textWidth } from './font'
@@ -39,8 +39,12 @@ export const C = {
   shadow: '#2A1A22',
 }
 
-export const GROUP_INK: Record<Group, string> = { kopitiam: '#6B3E26', nasi: '#24774A', roti: '#B8740E', kuih: '#C2416C' }
-const GROUP_PASTEL: Record<Group, string> = { kopitiam: '#F2CDAE', nasi: '#C5E8C8', roti: '#FBE3A0', kuih: '#F7C6D8' }
+/** Two card colours, like a normal deck: sambal red and near-black kopi. */
+const RED = '#C8352B'
+const BLACK = '#2A1A22'
+export const SUIT_INK: Record<Group, string> = Object.fromEntries(GROUPS.map((g) => [g, RED_SUITS.includes(g) ? RED : BLACK])) as Record<Group, string>
+/** Pale tint behind the picture: blush for red suits, cool slate for black. */
+const SUIT_TINT: Record<Group, string> = Object.fromEntries(GROUPS.map((g) => [g, RED_SUITS.includes(g) ? '#F8D8D2' : '#D6DCE6'])) as Record<Group, string>
 
 export const CARD_W = 32
 export const CARD_H = 44
@@ -51,160 +55,73 @@ export const MINI_H = 16
 
 type Icon = (p: Paint, ox: number, oy: number) => void
 
-const plate = (p: Paint, ox: number, oy: number) => {
-  p.ellipse(ox + 8, oy + 11, 7.5, 4, '#FFFDF6')
-  p.ring(ox + 8, oy + 11, 7.5, 4, C.blueRim)
+/** One full-colour picture per suit, the same on every card of that suit. */
+const SUIT_ART: Record<Group, Icon> = {
+  karipap: (p, ox, oy) => {
+    // Crimped half-moon pastry.
+    for (let y = 0; y < 8; y++) {
+      const half = Math.round(Math.sqrt(64 - (8 - y) ** 2) * 0.95)
+      p.rect(ox + 8 - half, oy + 5 + y, half * 2, 1, y < 2 ? '#F2C15A' : y < 6 ? '#E3A23A' : '#C9852A')
+    }
+    for (let i = 0; i < 9; i++) {
+      const a = Math.PI + (i / 8) * Math.PI
+      p.px(ox + 8 + Math.round(Math.cos(a) * 7.5), oy + 13 + Math.round(Math.sin(a) * 7.5), '#9A5E1A')
+    }
+    p.rect(ox + 1, oy + 13, 14, 1, '#9A5E1A')
+    p.px(ox + 5, oy + 8, '#FFE7A0')
+    p.px(ox + 6, oy + 7, '#FFE7A0')
+  },
+  tehtarik: (p, ox, oy) => {
+    // Tall glass of teh tarik with a frothy top.
+    p.rect(ox + 4, oy + 1, 8, 14, '#DDEFF4')
+    p.rect(ox + 5, oy + 4, 6, 10, '#C8925A')
+    p.rect(ox + 5, oy + 2, 6, 3, '#F6E7CC')
+    p.px(ox + 6, oy + 1, '#F6E7CC')
+    p.px(ox + 9, oy + 1, '#F6E7CC')
+    p.rect(ox + 4, oy + 1, 1, 14, '#FFFFFF')
+    p.rect(ox + 5, oy + 9, 6, 1, '#B07A48')
+    p.ring(ox + 12.5, oy + 8, 2, 2.5, '#DDEFF4')
+    p.rect(ox + 3, oy + 15, 10, 1, '#B8C8CC')
+  },
+  ramly: (p, ox, oy) => {
+    p.ellipse(ox + 8, oy + 5, 7, 3.5, '#D98A3A')
+    p.rect(ox + 1, oy + 5, 14, 2, '#D98A3A')
+    for (const [x, y] of [
+      [5, 3],
+      [9, 2],
+      [11, 4],
+      [7, 5],
+    ])
+      p.px(ox + x, oy + y, '#FFF2C8')
+    p.rect(ox + 1, oy + 7, 14, 1, '#7CCB5A')
+    p.rect(ox, oy + 8, 16, 2, '#F4D35E')
+    p.rect(ox + 1, oy + 10, 14, 2, '#6B3A1E')
+    p.px(ox + 14, oy + 9, '#C8352B')
+    p.rect(ox + 1, oy + 12, 14, 2, '#C97A30')
+    p.rect(ox + 2, oy + 14, 12, 1, '#A8622A')
+  },
+  nasilemak: (p, ox, oy) => {
+    p.ellipse(ox + 8, oy + 10, 8, 5, C.leaf)
+    p.rect(ox + 2, oy + 10, 12, 1, '#2C7239')
+    p.ellipse(ox + 6, oy + 9, 4, 3, '#FFFDF8')
+    p.circle(ox + 11.5, oy + 7.5, 2, C.red)
+    p.ellipse(ox + 11, oy + 12, 2, 1.4, '#FFFFFF')
+    p.px(ox + 11, oy + 12, C.yellow)
+    p.rect(ox + 2, oy + 12, 2, 1, C.greenLight)
+    p.rect(ox + 5, oy + 13, 3, 1, '#C98B4A')
+  },
 }
 
-const cup = (liquid: string, extra?: string): Icon => (p, ox, oy) => {
-  p.ellipse(ox + 8, oy + 14, 7, 1.6, '#FFFDF6')
-  p.rect(ox + 3, oy + 6, 10, 7, '#FFFDF6')
-  p.rect(ox + 4, oy + 12, 8, 1, '#E8DCC4')
-  p.rect(ox + 3, oy + 9, 10, 1, C.green)
-  p.ring(ox + 13.5, oy + 9, 2, 2, '#FFFDF6')
-  p.ellipse(ox + 8, oy + 6, 5, 1.2, liquid)
-  if (extra) p.rect(ox + 6, oy + 6, 3, 1, extra)
-  for (const [x, y] of [
-    [5, 3],
-    [6, 2],
-    [6, 1],
-    [10, 4],
-    [9, 3],
-    [10, 1],
-  ])
-    p.px(ox + x, oy + y, '#FFFFFF')
+/** 5×5 one-colour suit symbols for the card corners. */
+const PIPS: Record<Group, string[]> = {
+  karipap: ['.....', '.###.', '#####', '#####', '.....'],
+  tehtarik: ['###..', '###.#', '###.#', '####.', '###..'],
+  ramly: ['.###.', '#####', '.....', '#####', '.###.'],
+  nasilemak: ['..#..', '.###.', '.###.', '#####', '#####'],
 }
 
-const glass = (liquid: string, straw: string | null, foam = false): Icon => (p, ox, oy) => {
-  p.rect(ox + 4, oy + 3, 8, 12, '#DDEFF4')
-  p.rect(ox + 5, oy + 5, 6, 9, liquid)
-  if (foam) p.rect(ox + 5, oy + 3, 6, 3, '#F6E7CC')
-  else {
-    p.rect(ox + 5, oy + 6, 2, 2, '#FFFFFF')
-    p.rect(ox + 8, oy + 9, 2, 2, '#FFFFFF')
-  }
-  p.rect(ox + 4, oy + 3, 1, 12, '#FFFFFF')
-  if (straw) p.line(ox + 10, oy + 8, ox + 12, oy + 0, straw)
-  if (foam) p.ring(ox + 12.5, oy + 9, 2, 2.5, '#DDEFF4')
-}
-
-const ICONS: Record<Group, Icon[]> = {
-  kopitiam: [cup('#2B160C'), glass('#C8925A', null, true), glass('#5A3420', C.green), glass('#F08DAE', C.yellow), cup('#9A6338', '#F2E2C2')],
-  nasi: [
-    (p, ox, oy) => {
-      p.ellipse(ox + 8, oy + 10, 8, 5, C.leaf)
-      p.ellipse(ox + 6, oy + 9, 4, 3, '#FFFDF8')
-      p.circle(ox + 11.5, oy + 7.5, 2, C.red)
-      p.ellipse(ox + 11, oy + 12, 2, 1.4, '#FFFFFF')
-      p.px(ox + 11, oy + 12, C.yellow)
-      p.rect(ox + 2, oy + 12, 2, 1, C.greenLight)
-      p.rect(ox + 5, oy + 13, 3, 1, '#C98B4A')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.ellipse(ox + 8, oy + 9, 5, 3.4, '#E9A24A')
-      p.ellipse(ox + 8, oy + 7, 2.5, 1.6, '#FFFFFF')
-      p.px(ox + 8, oy + 7, C.yellow)
-      p.px(ox + 12, oy + 10, C.red)
-      p.px(ox + 4, oy + 10, C.red)
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.ellipse(ox + 7, oy + 9, 4.5, 3.2, '#7FA7E6')
-      for (const [x, y] of [
-        [11, 9],
-        [12, 11],
-        [10, 12],
-        [13, 10],
-      ])
-        p.px(ox + x, oy + y, C.greenLight)
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.ellipse(ox + 6, oy + 9, 4, 3, '#E2C79A')
-      p.ellipse(ox + 11, oy + 10, 3, 2, C.orange)
-      p.px(ox + 11, oy + 9, '#F4D4A4')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.ellipse(ox + 6, oy + 9, 4, 3, '#FFF6DC')
-      p.ellipse(ox + 11, oy + 9, 2.6, 1.8, '#C9873E')
-      p.rect(ox + 12, oy + 11, 2, 1, C.greenLight)
-    },
-  ],
-  roti: [
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.ellipse(ox + 7, oy + 10, 5.5, 3, '#E9B45A')
-      p.ring(ox + 7, oy + 10, 3, 1.5, '#B97A1F')
-      p.circle(ox + 13, oy + 7, 1.6, '#E7A43A')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.rect(ox + 3, oy + 7, 10, 6, '#E9B45A')
-      p.rect(ox + 5, oy + 8, 2, 2, '#FFE15C')
-      p.rect(ox + 9, oy + 10, 2, 2, '#FFE15C')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      for (const x of [3, 9]) {
-        for (let i = 0; i < 5; i++) p.rect(ox + x + i * 0.5, oy + 7 + i, 5 - i, 1, '#C9813A')
-        p.rect(ox + x, oy + 9, 4, 1, C.greenLight)
-      }
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.dither(ox + 3, oy + 7, 10, 6, '#F0C048')
-      p.dither(ox + 4, oy + 8, 8, 4, '#F0C048', 1)
-      p.dither(ox + 4, oy + 8, 8, 4, '#D9A02E')
-    },
-    (p, ox, oy) => {
-      p.ellipse(ox + 8, oy + 14, 7, 1.6, '#FFFDF6')
-      for (let y = 1; y < 14; y++) {
-        const half = Math.round((y / 13) * 5)
-        p.rect(ox + 8 - half, oy + y, half * 2 + 1, 1, y % 3 ? '#F2C15A' : '#C98A22')
-      }
-    },
-  ],
-  kuih: [
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      for (let i = 0; i < 8; i++) p.rect(ox + 5, oy + 3 + i, 7, 1, i % 2 ? '#FFF4E8' : '#E9467B')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      for (const [x, y] of [
-        [5, 10],
-        [11, 10],
-        [8, 6],
-      ]) {
-        p.circle(ox + x, oy + y, 2.6, '#3FA34D')
-        p.px(ox + x - 1, oy + y - 1, '#FFFFFF')
-        p.px(ox + x + 1, oy + y, '#FFFFFF')
-      }
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.rect(ox + 4, oy + 4, 8, 4, '#5BB04A')
-      p.rect(ox + 4, oy + 8, 8, 4, '#FFFBEF')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      p.rect(ox + 2, oy + 7, 12, 4, '#52A84B')
-      p.rect(ox + 13, oy + 7, 1, 4, '#8A4B20')
-      p.rect(ox + 2, oy + 7, 1, 4, '#8A4B20')
-    },
-    (p, ox, oy) => {
-      plate(p, ox, oy)
-      for (let y = 0; y < 6; y++) {
-        const half = Math.round(Math.sqrt(36 - (6 - y) ** 2))
-        p.rect(ox + 8 - half, oy + 6 + y, half * 2, 1, y < 2 ? '#E3A548' : '#F2D07A')
-      }
-      p.px(ox + 6, oy + 10, '#8A5520')
-      p.px(ox + 9, oy + 9, '#8A5520')
-      p.px(ox + 11, oy + 11, '#8A5520')
-    },
-  ],
+export function pip(p: Paint, group: Group, x: number, y: number, col = SUIT_INK[group]) {
+  PIPS[group].forEach((row, ry) => [...row].forEach((c, rx) => c === '#' && p.px(x + rx, y + ry, col)))
 }
 
 /** Tiny 16×16 hawker portraits for the face cards. */
@@ -244,22 +161,21 @@ function crown(p: Paint, ox: number, oy: number) {
 
 function cardFront(card: Card): Paint {
   const p = new Paint(CARD_W, CARD_H)
-  const ink = GROUP_INK[card.group]
+  const ink = SUIT_INK[card.group]
   const special = card.rank >= 14
-  p.rrect(0, 0, CARD_W, CARD_H, special ? C.goldDark : ink)
+  p.rrect(0, 0, CARD_W, CARD_H, ink)
   p.rrect(1, 1, CARD_W - 2, CARD_H - 2, C.paper)
   p.rect(2, CARD_H - 3, CARD_W - 4, 1, C.paperShade)
-  // Corner index, big enough to read when cards overlap.
+  // Corner index and suit symbol: what you read when cards overlap in hand.
   const label = rankLabel(card.rank)
   p.text(label, label.length > 1 ? 2 : 3, 3, ink, 2)
-  p.ellipse(16, 27, 10, 8.5, GROUP_PASTEL[card.group])
-  if (special) p.ring(16, 27, 10, 8.5, C.gold)
-  if (card.rank >= 11 && card.rank <= 13) portrait(p, 8, 19, card.rank)
-  else ICONS[card.group][card.rank === 14 ? 0 : card.rank === 15 ? 1 : dishIndex(card.rank)](p, 8, 19)
-  if (card.rank === 15) crown(p, 22, 14)
+  pip(p, card.group, label.length > 1 ? 3 : 4, 19)
+  p.ellipse(19, 28, 10, 9, SUIT_TINT[card.group])
+  p.ring(19, 28, 10, 9, special ? C.gold : ink)
+  if (card.rank >= 11 && card.rank <= 13) portrait(p, 11, 20, card.rank)
+  else SUIT_ART[card.group](p, 11, 20)
+  if (card.rank === 15) crown(p, 24, 15)
   p.text(label, CARD_W - 3 - textWidth(label), CARD_H - 10, ink)
-  // Food-group pip, the suit marker.
-  p.rect(3, CARD_H - 8, 3, 3, ink)
   return p
 }
 
@@ -299,10 +215,10 @@ function miniBack(): Paint {
 
 function miniFront(group: Group): Paint {
   const p = new Paint(MINI_W, MINI_H)
-  p.rrect(0, 0, MINI_W, MINI_H, GROUP_INK[group])
+  p.rrect(0, 0, MINI_W, MINI_H, SUIT_INK[group])
   p.rect(1, 1, MINI_W - 2, MINI_H - 2, C.paper)
-  p.circle(6, 8, 3, GROUP_PASTEL[group])
-  p.rect(2, 2, 3, 2, GROUP_INK[group])
+  p.circle(6, 8, 4, SUIT_TINT[group])
+  pip(p, group, 4, 6)
   return p
 }
 
@@ -741,7 +657,7 @@ export function buildAtlas(): Atlas {
   for (const card of ALL_CARDS) a.add(`card:${card.id}`, cardFront(card), { bevel: 1, detail: 0.25 })
   a.add('card:back', cardBack(), { bevel: 1, detail: 0.3 })
   a.add('mini:back', miniBack(), { bevel: 1 })
-  for (const g of ['kopitiam', 'nasi', 'roti', 'kuih'] as Group[]) a.add(`mini:${g}`, miniFront(g), { bevel: 1 })
+  for (const g of GROUPS) a.add(`mini:${g}`, miniFront(g), { bevel: 1 })
   for (const id of ['ahseng', 'lina', 'mat'] as const) {
     for (const pose of POSES) a.add(`hawker:${id}:${pose}`, hawker(id, pose), { bevel: 4, detail: 0.4 })
   }

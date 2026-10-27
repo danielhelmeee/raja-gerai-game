@@ -1,6 +1,6 @@
 import { ALL_CARDS, sortByGroup, sortCards } from '../game/cards'
 import { PERSONAS, pick } from '../game/personas'
-import { shapeName } from '../game/rules'
+import { isRoyal, shapeName } from '../game/rules'
 import type { Highlight } from '../game/tutorial'
 import type { GameEvent, GameState, PersonaId, Player } from '../game/types'
 import type { Atlas } from './atlas'
@@ -104,7 +104,7 @@ interface CoinFlight {
   at: number
 }
 
-const MENU_FAN = ['kopitiam-3', 'nasi-11', 'roti-12', 'kuih-13', 'kopitiam-14', 'nasi-15', 'kuih-7']
+const MENU_FAN = ['karipap-3', 'tehtarik-11', 'ramly-12', 'nasilemak-13', 'karipap-14', 'tehtarik-15', 'nasilemak-7']
 const SIGN_COLORS = ['#FFB347', '#9CFF8A', '#FFD27A', '#7FD6FF', '#FF7AA8', '#FF7A45']
 const MENU_PLAYERS: Player[] = (['you', 'ahseng', 'lina', 'mat'] as PersonaId[]).map((persona, id) => ({
   id,
@@ -342,7 +342,7 @@ export class World {
         }
         case 'jual': {
           const big = e.shape.kind === 'five'
-          const royal = e.shape.five === 'diraja'
+          const royal = e.shape.five === 'tapaubarisan'
           this.shake = { until: this.t + (big ? 0.35 : 0.18), mag: big ? 3 : 2 }
           this.flash = royal ? 0.22 : big ? 0.14 : 0.07
           this.light(L.gerai[0], L.gerai[1], 40, big ? 200 : 140, royal ? '#FFE070' : '#FFC870', big ? 2.2 : 1.4, big ? 1.6 : 2.2)
@@ -352,6 +352,11 @@ export class World {
             this.react(e.actor, 'joy', (p) => p.lines.last)
             this.floatAt(e.actor, 'LAST CARD!', '#FF6A5A')
           } else this.react(e.actor, big ? 'slap' : 'joy', (p) => (big ? p.lines.big : p.lines.jual))
+          if (isRoyal(e.shape)) {
+            this.flash = 0.3
+            this.floatAt(e.actor, 'HIDANGAN DIRAJA!', '#FFE070')
+            this.sparks(L.gerai[0], L.gerai[1], 40, ['#FFE070', '#FFFFFF'], 130)
+          }
           if (e.beat !== null && e.beat !== e.actor && (big || Math.random() < 0.35)) this.react(e.beat, 'annoyed', (p) => p.lines.beaten, 0.2)
           break
         }

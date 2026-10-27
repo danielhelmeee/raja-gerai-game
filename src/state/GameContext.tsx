@@ -3,7 +3,7 @@ import { audio } from '../audio/AudioEngine'
 import { decide } from '../game/ai'
 import { describe, type Tone } from '../game/describe'
 import { canPass, gameReducer, initialState } from '../game/engine'
-import { checkJual, type JualCheck } from '../game/rules'
+import { checkJual, isRoyal, type JualCheck } from '../game/rules'
 import { TUTORIAL_STEPS, type Highlight, type TutAction, type TutorialStep } from '../game/tutorial'
 import type { GameAction, GameConfig, GameState } from '../game/types'
 import { useSettings } from './settings'
@@ -80,7 +80,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
           if (state.players[e.starter]?.isHuman) audio.play('turn', 2.2)
           break
         case 'jual':
-          if (e.shape.five === 'diraja') audio.play('royal', 0.1)
+          if (e.shape.five === 'tapaubarisan') audio.play('royal', 0.1)
+          if (isRoyal(e.shape)) add.push({ id: ++msgId.current, text: 'HIDANGAN DIRAJA! The royal feast is served!', tone: 'big' })
           else if (e.shape.kind === 'five') audio.play('combo', 0.1)
           else audio.play('jual', 0.1)
           if (state.players[e.actor]?.hand.length === 1) {
