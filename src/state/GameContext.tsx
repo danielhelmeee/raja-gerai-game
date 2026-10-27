@@ -4,6 +4,7 @@ import { decide } from '../game/ai'
 import { describe, type Tone } from '../game/describe'
 import { canPass, gameReducer, initialState } from '../game/engine'
 import { checkJual, isRoyal, type JualCheck } from '../game/rules'
+import { TUTORIAL_OPPONENTS } from '../game/personas'
 import { TUTORIAL_STEPS, type Highlight, type TutAction, type TutorialStep } from '../game/tutorial'
 import type { GameAction, GameConfig, GameState } from '../game/types'
 import { useSettings } from './settings'
@@ -230,6 +231,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   if (import.meta.env.DEV) {
     ;(window as unknown as { __raja: unknown }).__raja = {
       toggleSelect,
+      startGame,
       state,
       tutIndex,
       autoplay: () => state.status === 'playing' && state.turn === 0 && dispatch(decide(state, 0)),
@@ -250,7 +252,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     jual,
     pass,
     startGame,
-    startTutorial: () => startGame({ difficulty: settings.difficulty, totalRounds: 1, tutorial: true }),
+    startTutorial: () => startGame({ difficulty: settings.difficulty, totalRounds: 1, opponents: TUTORIAL_OPPONENTS, tutorial: true }),
     nextRound: () => {
       audio.play('ui')
       dispatch({ type: 'NEXT_ROUND' })

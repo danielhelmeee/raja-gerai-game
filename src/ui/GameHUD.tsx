@@ -219,7 +219,7 @@ export function Settlement() {
           <button className="px-btn btn-plain flex-1" onClick={() => (click(), quitToMenu())}>
             Main Menu
           </button>
-          <button className="px-btn btn-jual flex-[2]" onClick={() => (click(), startGame({ difficulty: state.difficulty, totalRounds: state.totalRounds }))}>
+          <button className="px-btn btn-jual flex-[2]" onClick={() => (click(), startGame({ difficulty: state.difficulty, totalRounds: state.totalRounds, opponents: state.players.slice(1).map((p) => p.persona) }))}>
             Main Lagi!
           </button>
         </div>

@@ -1,5 +1,5 @@
 import { ALL_CARDS, sortByGroup, sortCards } from '../game/cards'
-import { PERSONAS, pick } from '../game/personas'
+import { PERSONAS, pick, randomLineup } from '../game/personas'
 import { isRoyal, shapeName } from '../game/rules'
 import type { Highlight } from '../game/tutorial'
 import type { GameEvent, GameState, PersonaId, Player } from '../game/types'
@@ -106,7 +106,7 @@ interface CoinFlight {
 
 const MENU_FAN = ['karipap-3', 'tehtarik-11', 'ramly-12', 'nasilemak-13', 'karipap-14', 'tehtarik-15', 'nasilemak-7']
 const SIGN_COLORS = ['#FFB347', '#9CFF8A', '#FFD27A', '#7FD6FF', '#FF7AA8', '#FF7A45']
-const MENU_PLAYERS: Player[] = (['you', 'ahseng', 'lina', 'mat'] as PersonaId[]).map((persona, id) => ({
+const MENU_PLAYERS: Player[] = (['you', ...randomLineup()] as PersonaId[]).map((persona, id) => ({
   id,
   name: PERSONAS[persona].name,
   isHuman: id === 0,
@@ -115,7 +115,6 @@ const MENU_PLAYERS: Player[] = (['you', 'ahseng', 'lina', 'mat'] as PersonaId[])
   duit: 0,
   roundScores: [],
 }))
-const SHORT: Record<PersonaId, string> = { you: 'YOU', ahseng: 'AH SENG', lina: 'KAK LINA', mat: 'ABANG MAT' }
 
 export class World {
   private atlas: Atlas
@@ -543,8 +542,8 @@ export class World {
       flash: [this.flash, this.flash * 0.75, this.flash * 0.3],
       shake: shaking ? [(Math.random() - 0.5) * 2 * this.shake.mag, (Math.random() - 0.5) * 2 * this.shake.mag] : [0, 0],
       scanlines: this.snap.scanlines,
-      // Your hand never sinks below this brightness, whatever the lamps are doing.
-      floor: { x: 0, y: L.handY - 14, w: L.W, h: CARD_H + 16, level: 0.92 },
+      // Your hand cards never sink below this brightness; the table under them keeps the normal lighting.
+      floor: 0.92,
     })
   }
 
@@ -743,7 +742,7 @@ export class World {
       else name = e.face === 'front' ? `mini:${id.split('-')[0]}` : 'mini:back'
       const sel = this.snap.selected.includes(id) && t.zone === 'hand'
       const lift = sel ? 1.12 : 1
-      this.spr(this.lit, name, x, y, { w: dw, h, color: [lift, lift, lift, 1] })
+      this.spr(this.lit, name, x, y, { w: dw, h, color: [lift, lift, lift, 1], bright: t.zone === 'hand' })
       if (canPick && t.zone === 'hand') this.hits.push({ x, y, w: dw, h: h + 12, hand: id })
       if (sel) this.frameRect(this.em, x - 1, y - 1, dw + 2, h + 2, rgba('#00E07A', 0.9))
     }
@@ -798,7 +797,7 @@ export class World {
   private drawTelemetry(p: Player, i: number, glow: boolean) {
     const seat = this.seatOf(i)
     const s = this.snap.state
-    const name = this.L.portrait ? SHORT[p.persona] : p.name.toUpperCase()
+    const name = (this.L.portrait ? PERSONAS[p.persona].short : p.name).toUpperCase()
     const stats: [string, string, string][] = [
       ['icon:card', String(p.hand.length), '#5A3A26'],
       ['icon:coin', String(p.duit), p.duit < 0 ? '#C8352B' : '#9C6A22'],
@@ -836,7 +835,7 @@ export class World {
     const s = this.snap.state
     if (s.status !== 'playing' || !s.gerai.shape) return
     const owner = s.players[s.gerai.ownerId!]
-    const who = owner.isHuman ? 'YOURS' : L.portrait ? SHORT[owner.persona] : owner.name
+    const who = owner.isHuman ? 'YOURS' : L.portrait ? PERSONAS[owner.persona].short : owner.name
     const label = `${who}: ${shapeName(s.gerai.shape, s.gerai.cards)}`
     const tw = textWidth(label)
     const y = L.cloth.y + L.cloth.h + 4

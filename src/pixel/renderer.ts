@@ -24,6 +24,8 @@ export interface Draw {
   sy?: number
   sw?: number
   sh?: number
+  /** Never lit below the frame's `floor` level (your hand cards). */
+  bright?: boolean
 }
 
 export interface Frame3 {
@@ -35,8 +37,8 @@ export interface Frame3 {
   flash: [number, number, number]
   shake: [number, number]
   scanlines: boolean
-  /** A rect (logical px) whose light never drops below `level`: keeps your hand readable. */
-  floor: { x: number; y: number; w: number; h: number; level: number }
+  /** Minimum light for `bright` sprites, so your hand stays readable. */
+  floor: number
 }
 
 const MAX_LIGHTS = 28
@@ -62,8 +64,9 @@ void main() {
   if (t.a < 0.5) discard;
   if (uMode == 1) {
     vec3 n = t.rgb * 2.0 - 1.0;
-    n.x *= vFlip;
-    o = vec4(n * 0.5 + 0.5, 1.0);
+    n.x *= sign(vFlip);
+    // Alpha 0 marks "bright" sprites for the lighting pass.
+    o = vec4(n * 0.5 + 0.5, abs(vFlip) > 1.5 ? 0.0 : 1.0);
   } else {
     o = vec4(t.rgb * vColor.rgb, vColor.a);
   }
@@ -79,7 +82,7 @@ uniform sampler2D uAlbedo; uniform sampler2D uNormal; uniform sampler2D uEmissiv
 uniform vec2 uRes; uniform int uCount;
 uniform vec4 uLightPos[${MAX_LIGHTS}]; uniform vec4 uLightCol[${MAX_LIGHTS}];
 uniform vec3 uAmbient; uniform vec3 uFlash;
-uniform vec4 uFloorRect; uniform float uFloor;
+uniform float uFloor;
 out vec4 o;
 const float BANDS = 6.0;
 float bayer(vec2 p) {
@@ -91,7 +94,8 @@ void main() {
   vec2 uv = gl_FragCoord.xy / uRes;
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   vec3 alb = texture(uAlbedo, uv).rgb;
-  vec3 n = normalize(texture(uNormal, uv).xyz * 2.0 - 1.0);
+  vec4 nt = texture(uNormal, uv);
+  vec3 n = normalize(nt.xyz * 2.0 - 1.0);
   vec3 light = uAmbient;
   for (int i = 0; i < ${MAX_LIGHTS}; i++) {
     if (i >= uCount) break;
@@ -102,7 +106,7 @@ void main() {
     float ndl = max(dot(n, normalize(L)), 0.0);
     light += lc.rgb * lc.a * att * (0.3 + 0.7 * ndl);
   }
-  if (p.x >= uFloorRect.x && p.y >= uFloorRect.y && p.x < uFloorRect.z && p.y < uFloorRect.w) light = max(light, vec3(uFloor));
+  if (nt.a < 0.5) light = max(light, vec3(uFloor));
   // Posterise the light into bands with an ordered dither: the 16-bit look.
   light = floor(light * BANDS + bayer(floor(p))) / BANDS;
   vec4 em = texture(uEmissive, uv);
@@ -274,7 +278,7 @@ export class Renderer {
       const v1 = (s.f.y + sy + sh) * inv
       if (s.flipX) [u0, u1] = [u1, u0]
       const [r, g, b, a] = s.color ?? [1, 1, 1, 1]
-      const flip = s.flipX ? -1 : 1
+      const flip = (s.flipX ? -1 : 1) * (s.bright ? 2 : 1)
       let o = n * 6 * FLOATS_PER_VERT
       const v = (x: number, y: number, u: number, vv: number) => {
         d[o++] = x
@@ -310,10 +314,13 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT)
     this.drawSprites(f.lit, this.albedoAtlas, 0)
 
+    // Normals are opaque, and their alpha carries the "bright" mark, so draw them unblended.
     gl.bindFramebuffer(gl.FRAMEBUFFER, t.normal.fb)
     gl.clearColor(0.5, 0.5, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.disable(gl.BLEND)
     this.drawSprites(f.lit, this.normalAtlas, 1)
+    gl.enable(gl.BLEND)
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, t.emissive.fb)
     gl.clearColor(0, 0, 0, 0)
@@ -337,8 +344,7 @@ export class Renderer {
     gl.uniform2f(this.u(this.lightProg, 'uRes'), this.W, this.H)
     gl.uniform3fv(this.u(this.lightProg, 'uAmbient'), f.ambient)
     gl.uniform3fv(this.u(this.lightProg, 'uFlash'), f.flash)
-    gl.uniform4f(this.u(this.lightProg, 'uFloorRect'), f.floor.x, f.floor.y, f.floor.x + f.floor.w, f.floor.y + f.floor.h)
-    gl.uniform1f(this.u(this.lightProg, 'uFloor'), f.floor.level)
+    gl.uniform1f(this.u(this.lightProg, 'uFloor'), f.floor)
     const bind = (unit: number, tex: WebGLTexture, name: string) => {
       gl.activeTexture(gl.TEXTURE0 + unit)
       gl.bindTexture(gl.TEXTURE_2D, tex)

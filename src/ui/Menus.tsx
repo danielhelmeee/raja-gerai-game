@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { audio } from '../audio/AudioEngine'
+import { PERSONAS, randomLineup } from '../game/personas'
 import type { Difficulty } from '../game/types'
 import { useGame } from '../state/GameContext'
 import { useSettings } from '../state/settings'
@@ -62,7 +63,7 @@ export function MainMenu() {
         </nav>
       </div>
       <p className="blink pointer-events-auto font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kertas/70">
-        ↑ ↓ + Enter or click · Dai Di vs 3 hawkers
+        ↑ ↓ + Enter or click · Dai Di vs 15 hawkers
       </p>
     </div>
   )
@@ -71,11 +72,26 @@ export function MainMenu() {
 export function SetupScreen() {
   const { setScreen, startGame } = useGame()
   const { settings, update } = useSettings()
+  const [lineup, setLineup] = useState(randomLineup)
   return (
     <Modal onClose={() => setScreen('menu')}>
       <h2 className="px-title">Buka Gerai</h2>
-      <p className="px-text mt-1 text-kopi/70">You vs Uncle Ah Seng, Kak Lina and Abang Mat. 13 cards each.</p>
+      <p className="px-text mt-1 text-kopi/70">Four hawkers, 13 cards each.</p>
       <div className="mt-4 space-y-4">
+        <section>
+          <h3 className="px-label mb-2">Tonight's hawkers</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {lineup.map((id) => (
+              <span key={id} className="px-chip flex items-center gap-1.5" data-on="false">
+                <span className="inline-block h-2.5 w-2.5" style={{ background: PERSONAS[id].accent }} />
+                {PERSONAS[id].name}
+              </span>
+            ))}
+            <button className="px-btn btn-stamp !px-2 !text-[max(calc(var(--s)*4.5),10px)]" onClick={() => (click(), setLineup(randomLineup()))}>
+              Tukar
+            </button>
+          </div>
+        </section>
         <section>
           <h3 className="px-label mb-2">Difficulty</h3>
           <Toggle<Difficulty>
@@ -119,7 +135,7 @@ export function SetupScreen() {
           onClick={() => {
             audio.unlock()
             click()
-            startGame({ difficulty: settings.difficulty, totalRounds: settings.totalRounds })
+            startGame({ difficulty: settings.difficulty, totalRounds: settings.totalRounds, opponents: lineup })
           }}
         >
           Buka Gerai!
@@ -132,7 +148,7 @@ export function SetupScreen() {
 const RULES: { term: string; color: string; body: string }[] = [
   { term: 'Goal', color: '#3B2416', body: 'Be the first of the four hawkers to sell all 13 of your cards. Everyone still holding cards pays you DUIT.' },
   { term: 'Card order', color: '#3B2416', body: '3 is lowest, then 4–10, J, Q, K, A, and 2 is highest. On equal numbers the suit decides: Karipap < Teh Tarik < Ramly Burger < Nasi Lemak (red and black alternate, like ◆ ♣ ♥ ♠).' },
-  { term: 'Opening', color: '#3B2416', body: 'In the first round, whoever holds the Karipap 3 starts and must include it in their first play. In later rounds, the last winner leads.' },
+  { term: 'Opening', color: '#3B2416', body: 'Every round, whoever holds the Karipap 3 starts and must include it in their first play.' },
   { term: 'Jual', color: '#00A859', body: 'Play onto the Gerai mat a single, pair, three of a kind, or a 5-card hand that beats what is there: same number of cards, higher value.' },
   { term: '5-card hands', color: '#7A2335', body: 'Weakest to strongest: BARISAN (straight; 2s can\'t be in one), TAPAU (5 of one suit), KENDURI (full house), BORONG (four of a kind + 1), TAPAU BARISAN (straight flush). The top Tapau Barisan, 10-J-Q-K-A of one suit, is the HIDANGAN DIRAJA. A higher type always wins; the same type compares the top card or the main number.' },
   { term: 'Lalu', color: '#3B2416', body: 'Pass. You can still play later in the same Gerai. When everyone else passes, the last hawker to play wins the Gerai: it\'s cleared and they lead anything.' },

@@ -1,8 +1,8 @@
 import { ALL_CARDS, CARD_BY_ID, HAND_SIZE, OPENING_CARD, PLAYERS, shuffle, sortCards } from './cards'
-import { OPPONENT_ORDER, PERSONAS } from './personas'
+import { PERSONAS } from './personas'
 import { checkJual } from './rules'
 import { TUTORIAL_HANDS } from './tutorial'
-import type { GameAction, GameState, Gerai, NewGameEvent, Payout, Player } from './types'
+import type { GameAction, GameState, Gerai, NewGameEvent, Payout, PersonaId, Player } from './types'
 
 const EMPTY_GERAI: Gerai = { cards: [], ownerId: null, shape: null }
 const MAX_EVENTS = 40
@@ -29,8 +29,8 @@ function pushEvent(state: GameState, event: NewGameEvent): GameState {
   return { ...state, seq, events }
 }
 
-function makePlayers(): Player[] {
-  const personas = ['you' as const, ...OPPONENT_ORDER]
+function makePlayers(opponents: PersonaId[]): Player[] {
+  const personas: PersonaId[] = ['you', ...opponents]
   return personas.map((persona, id) => ({
     id,
     name: PERSONAS[persona].name,
@@ -59,10 +59,9 @@ function deal(state: GameState, round: number): GameState {
         return state.players.map((_, i) => deck.slice(i * HAND_SIZE, (i + 1) * HAND_SIZE))
       })()
   const players = state.players.map((p, i) => ({ ...p, hand: sortCards(hands[i]) }))
-  // Round one opens with the Karipap 3; later rounds, the last winner leads anything.
-  const opening = round === 1
-  const starter = opening ? players.findIndex((p) => p.hand.some((c) => c.id === OPENING_CARD)) : (state.lastWinner ?? 0)
-  const next: GameState = { ...state, status: 'playing', players, gerai: EMPTY_GERAI, discard: [], turn: starter, opening, round }
+  // Every round opens with the Karipap 3 holder, who must include it in their first play.
+  const starter = players.findIndex((p) => p.hand.some((c) => c.id === OPENING_CARD))
+  const next: GameState = { ...state, status: 'playing', players, gerai: EMPTY_GERAI, discard: [], turn: starter, opening: true, round }
   return pushEvent(next, { type: 'deal', round, starter })
 }
 
@@ -104,7 +103,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const { config } = action
       const base: GameState = {
         ...initialState,
-        players: makePlayers().slice(0, PLAYERS),
+        players: makePlayers(config.opponents).slice(0, PLAYERS),
         totalRounds: config.tutorial ? 1 : config.totalRounds,
         difficulty: config.difficulty,
         tutorial: !!config.tutorial,

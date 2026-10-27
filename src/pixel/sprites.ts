@@ -112,6 +112,9 @@ const SUIT_ART: Record<Group, Icon> = {
   },
 }
 
+/** Top row of each suit picture, so the 2's crown can sit right on it. */
+const ART_TOP: Record<Group, number> = { karipap: 5, tehtarik: 1, ramly: 2, nasilemak: 5 }
+
 /** 5×5 one-colour suit symbols for the card corners. */
 const PIPS: Record<Group, string[]> = {
   karipap: ['.....', '.###.', '#####', '#####', '.....'],
@@ -171,10 +174,11 @@ function cardFront(card: Card): Paint {
   p.text(label, label.length > 1 ? 2 : 3, 3, ink, 2)
   pip(p, card.group, label.length > 1 ? 3 : 4, 19)
   p.ellipse(19, 28, 10, 9, SUIT_TINT[card.group])
-  p.ring(19, 28, 10, 9, special ? C.gold : ink)
+  if (special) p.ring(19, 28, 10, 9, C.gold)
   if (card.rank >= 11 && card.rank <= 13) portrait(p, 11, 20, card.rank)
   else SUIT_ART[card.group](p, 11, 20)
-  if (card.rank === 15) crown(p, 24, 15)
+  // The 2 wears its crown on top of the food itself.
+  if (card.rank === 15) crown(p, 15, 20 + ART_TOP[card.group] - 4)
   p.text(label, CARD_W - 3 - textWidth(label), CARD_H - 10, ink)
   return p
 }
@@ -244,18 +248,50 @@ export const POSES: Pose[] = ['idle0', 'idle1', 'think', 'joy0', 'joy1', 'slap0'
 export const HAWKER_W = 52
 export const HAWKER_H = 56
 
+type Hair = 'bald' | 'balding' | 'short' | 'spiky' | 'wavy' | 'bun' | 'long' | 'bob' | 'braid' | 'ponytail' | 'tudung' | 'songkok' | 'turban' | 'kopiah'
+type Top = 'singlet' | 'tee' | 'batik' | 'tankCardigan' | 'kebaya' | 'saree' | 'checked' | 'hawaiian' | 'floral' | 'blouse' | 'kurta'
+
+/** Everything that makes one hawker look like themselves. */
 interface Look {
   skin: string
   skinDark: string
+  top: Top
   shirt: string
-  shirtDark: string
-  apron: string
+  /** Pattern / second colour: batik dots, the tank under a cardigan, a saree drape… */
+  trim?: string
+  apron?: string
+  hair: Hair
+  hairColor: string
+  /** Tudung, songkok, turban or kopiah colour. */
+  headwear?: string
+  beard?: 'full' | 'mustache'
+  beardColor?: string
+  glasses?: boolean
+  towel?: boolean
+  bindi?: boolean
+  earrings?: string
+  necklace?: string[]
+  /** Waves a spatula when celebrating. */
+  tool?: boolean
+  lashes?: boolean
 }
 
 const LOOKS: Record<Exclude<PersonaId, 'you'>, Look> = {
-  ahseng: { skin: '#F0C9A0', skinDark: '#D8A87A', shirt: '#F2EFE6', shirtDark: '#CFC9BA', apron: '#3B6FB6' },
-  lina: { skin: '#D9A273', skinDark: '#B98455', shirt: '#E2557A', shirtDark: '#B83B5E', apron: '#FFE9A8' },
-  mat: { skin: '#B97A4E', skinDark: '#94603A', shirt: '#7A3E9D', shirtDark: '#5A2A78', apron: '#F4B42A' },
+  ahseng: { skin: '#F0C9A0', skinDark: '#D8A87A', top: 'singlet', shirt: '#F2EFE6', apron: '#3B6FB6', hair: 'balding', hairColor: '#D8D4CC', glasses: true, towel: true, tool: true },
+  lina: { skin: '#D9A273', skinDark: '#B98455', top: 'blouse', shirt: '#E2557A', trim: '#B83B5E', apron: '#FFE9A8', hair: 'tudung', hairColor: '#F28C28', headwear: '#F28C28', lashes: true },
+  mat: { skin: '#B97A4E', skinDark: '#94603A', top: 'batik', shirt: '#7A3E9D', trim: '#F4B42A', apron: '#F4B42A', hair: 'songkok', hairColor: '#2A1A14', headwear: '#1B1416', beard: 'mustache', beardColor: '#2A1A14', tool: true },
+  ayan: { skin: '#D9A273', skinDark: '#B98455', top: 'tankCardigan', shirt: '#3B6FB6', trim: '#FBFBF6', hair: 'long', hairColor: '#2A1A14', lashes: true, earrings: '#E3A83A' },
+  pakdan: { skin: '#B97A4E', skinDark: '#94603A', top: 'tee', shirt: '#7A1E2E', hair: 'bald', hairColor: '#2A1E1A', beard: 'full', beardColor: '#2A1E1A', tool: true },
+  meiling: { skin: '#F0C9A0', skinDark: '#D8A87A', top: 'floral', shirt: '#E86A9A', trim: '#FFF2F6', apron: '#FBF3DF', hair: 'bun', hairColor: '#2A2024', earrings: '#3FA34D', lashes: true },
+  anand: { skin: '#8A5A3A', skinDark: '#6E4428', top: 'checked', shirt: '#3B6FB6', trim: '#F2EFE6', hair: 'wavy', hairColor: '#1A1214', beard: 'mustache', beardColor: '#1A1214', tool: true },
+  kavitha: { skin: '#9A633F', skinDark: '#7A4A2C', top: 'saree', shirt: '#E07A1A', trim: '#C2187A', hair: 'braid', hairColor: '#1A1214', bindi: true, earrings: '#F4B42A', necklace: ['#F4B42A'], lashes: true },
+  gurdev: { skin: '#C68B59', skinDark: '#A06C40', top: 'kurta', shirt: '#F2EFE6', trim: '#C9C2B4', apron: '#E07A1A', hair: 'turban', hairColor: '#1A1214', headwear: '#1F3F8A', beard: 'full', beardColor: '#1A1214' },
+  dayang: { skin: '#C68B59', skinDark: '#A06C40', top: 'tee', shirt: '#22202A', hair: 'bob', hairColor: '#1A1214', necklace: ['#F4B42A', '#C8352B', '#FBFBF6', '#2A3466'], earrings: '#F4B42A', lashes: true },
+  joanne: { skin: '#D9A273', skinDark: '#B98455', top: 'blouse', shirt: '#22202A', trim: '#E3A83A', apron: '#2E9A6A', hair: 'ponytail', hairColor: '#2A1A14', lashes: true },
+  robert: { skin: '#E8B88A', skinDark: '#C8966A', top: 'hawaiian', shirt: '#D6852E', trim: '#FBF3DF', hair: 'short', hairColor: '#C8C4BC', beard: 'mustache', beardColor: '#C8C4BC', glasses: true, tool: true },
+  ahkow: { skin: '#F0C9A0', skinDark: '#D8A87A', top: 'tee', shirt: '#4A8A3A', hair: 'spiky', hairColor: '#1A1418', towel: true, tool: true },
+  sweelian: { skin: '#F0C9A0', skinDark: '#D8A87A', top: 'kebaya', shirt: '#F2A8C8', trim: '#FFFFFF', hair: 'bun', hairColor: '#1A1418', earrings: '#F4B42A', lashes: true },
+  mamakali: { skin: '#8A5A3A', skinDark: '#6E4428', top: 'tee', shirt: '#2A7A8A', apron: '#F2EFE6', hair: 'kopiah', hairColor: '#1A1214', headwear: '#F2EFE6', beard: 'full', beardColor: '#1A1214', towel: true, tool: true },
 }
 
 type Pt = [number, number]
@@ -300,6 +336,12 @@ function arm(p: Paint, from: Pt, to: Pt, sleeve: string, skin: string) {
   p.rect(to[0] - 2, to[1] - 2, 5, 4, skin)
 }
 
+const shade = (hex: string, f: number) => {
+  const n = parseInt(hex.slice(1), 16)
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)))
+  return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => c(v).toString(16).padStart(2, '0')).join('')}`
+}
+
 function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
   const p = new Paint(HAWKER_W, HAWKER_H)
   const L = LOOKS[id]
@@ -308,62 +350,168 @@ function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
   const by = 34 + s.dy
   const hx = cx + s.headDx
   const hy = 20 + s.headDy
+  const covered = L.hair === 'tudung'
+  // Half-width of the head ellipse at a given row, for hair caps that hug the skull.
+  const headHalf = (y: number) => Math.max(0, 10 * Math.sqrt(Math.max(0, 1 - ((y - hy) / 11) ** 2)))
+  const cap = (y0: number, y1: number, col: string, extra = 1) => {
+    for (let y = y0; y <= y1; y++) {
+      const h = Math.round(headHalf(y) + extra)
+      if (h > 0) p.rect(hx - h, y, h * 2, 1, col)
+    }
+  }
 
-  // Torso.
+  // Torso and top.
+  const shirtDark = shade(L.shirt, 0.8)
   p.rrect(cx - 13, by, 26, 26, L.shirt)
-  p.rect(cx + 7, by + 2, 5, 22, L.shirtDark)
-  if (id === 'mat') for (let y = by + 3; y < by + 24; y += 4) for (let x = cx - 11; x < cx + 12; x += 4) p.px(x + ((y / 4) % 2) * 2, y, C.yellow)
-  if (id === 'ahseng') {
-    // Singlet: bare shoulders.
-    p.rect(cx - 13, by, 6, 6, L.skin)
-    p.rect(cx + 7, by, 6, 6, L.skin)
+  p.rect(cx + 7, by + 2, 5, 22, shirtDark)
+  switch (L.top) {
+    case 'singlet':
+      p.rect(cx - 13, by, 6, 6, L.skin)
+      p.rect(cx + 7, by, 6, 6, L.skin)
+      break
+    case 'batik':
+      for (let y = by + 3; y < by + 24; y += 4) for (let x = cx - 11; x < cx + 12; x += 4) p.px(x + ((y / 4) % 2) * 2, y, L.trim!)
+      break
+    case 'tankCardigan':
+      p.rect(cx - 5, by, 10, 26, L.trim!)
+      p.rect(cx - 6, by, 1, 26, shirtDark)
+      p.rect(cx + 5, by, 1, 26, shirtDark)
+      p.rect(cx - 4, by - 1, 8, 2, L.skin)
+      break
+    case 'kebaya':
+      for (let y = by + 1; y < by + 24; y += 2) {
+        p.px(cx - 5 + Math.floor((y - by) / 8), y, L.trim!)
+        p.px(cx + 4 - Math.floor((y - by) / 8), y, L.trim!)
+      }
+      for (let k = 0; k < 3; k++) p.px(cx, by + 6 + k * 5, C.gold)
+      break
+    case 'saree':
+      for (let i = 0; i < 26; i++) p.rect(cx + 10 - i * 0.9, by + i, 5, 1, L.trim!)
+      break
+    case 'checked':
+      for (let y = by + 2; y < by + 26; y += 4) p.rect(cx - 12, y, 24, 1, L.trim!)
+      for (let x = cx - 11; x < cx + 12; x += 4) p.rect(x, by + 1, 1, 25, L.trim!)
+      break
+    case 'hawaiian':
+    case 'floral':
+      for (let y = by + 4; y < by + 24; y += 6) {
+        for (let x = cx - 9 + ((y / 6) % 2) * 3; x < cx + 11; x += 7) {
+          p.px(x, y, L.trim!)
+          if (L.top === 'hawaiian') {
+            p.px(x - 1, y, L.trim!)
+            p.px(x + 1, y, L.trim!)
+            p.px(x, y - 1, L.trim!)
+            p.px(x, y + 1, L.trim!)
+          }
+        }
+      }
+      break
+    case 'blouse':
+      if (L.trim) p.rect(cx - 4, by, 8, 2, L.trim)
+      break
+    case 'kurta':
+      p.rect(cx, by + 1, 1, 12, L.trim!)
+      p.rect(cx - 3, by, 7, 2, L.trim!)
+      break
   }
-  p.rect(cx - 8, by + 6, 16, 22, L.apron)
-  p.rect(cx - 8, by + 6, 16, 1, INK)
-  p.line(cx - 8, by + 6, cx - 11, by, L.apron)
-  p.line(cx + 7, by + 6, cx + 10, by, L.apron)
-  if (id === 'lina') {
+  if (L.apron) {
+    p.rect(cx - 8, by + 6, 16, 22, L.apron)
+    p.rect(cx - 8, by + 6, 16, 1, INK)
+    p.line(cx - 8, by + 6, cx - 11, by, L.apron)
+    p.line(cx + 7, by + 6, cx + 10, by, L.apron)
+  }
+  if (covered) {
     // Tudung drapes over the shoulders.
-    p.ellipse(cx, by + 2, 15, 7, '#F28C28')
-    p.rect(cx - 6, by - 2, 12, 6, '#F28C28')
+    p.ellipse(cx, by + 2, 15, 7, L.headwear!)
+    p.rect(cx - 6, by - 2, 12, 6, L.headwear!)
   }
-  if (id === 'ahseng') {
-    // Good Morning towel over the shoulder.
+  if (L.towel) {
     p.rect(cx + 8, by - 1, 6, 12, C.white)
     p.rect(cx + 8, by + 7, 6, 2, C.red)
   }
   p.rect(cx - 3, by - 4, 6, 5, L.skin)
+  if (L.necklace) {
+    for (let i = -5; i <= 5; i++) p.px(cx + i, by + 1 + Math.round((25 - i * i) / 12), L.necklace[(i + 5) % L.necklace.length])
+  }
 
-  // Arms, from the shoulders.
-  const hasTool = id !== 'lina' && (pose.startsWith('joy') || pose.startsWith('cheer') || pose.startsWith('slap'))
-  arm(p, [cx - 12, by + 3], [s.left[0], s.left[1]], L.shirt, L.skin)
-  arm(p, [cx + 12, by + 3], [s.right[0], s.right[1]], L.shirt, L.skin)
+  // Hair that falls behind the head and shoulders.
+  if (L.hair === 'long') p.rrect(hx - 12, hy - 8, 24, by + 10 - (hy - 8), L.hairColor)
+  if (L.hair === 'bob' || L.hair === 'braid') p.rrect(hx - 12, hy - 8, 24, 18, L.hairColor)
+  if (L.hair === 'ponytail') p.rect(hx + 8, hy - 3, 5, 13, L.hairColor)
+  if (covered) p.ellipse(hx, hy - 1, 11, 12, L.headwear!)
+
+  // Arms, from the shoulders; bare in a singlet.
+  const sleeve = L.top === 'singlet' ? L.skin : L.shirt
+  const hasTool = L.tool && (pose.startsWith('joy') || pose.startsWith('cheer') || pose.startsWith('slap'))
+  arm(p, [cx - 12, by + 3], [s.left[0], s.left[1]], sleeve, L.skin)
+  arm(p, [cx + 12, by + 3], [s.right[0], s.right[1]], sleeve, L.skin)
   if (hasTool) {
     const [tx, ty] = s.right
     p.rect(tx + 1, ty - 9, 2, 8, '#6B4226')
     p.rect(tx - 1, ty - 14, 6, 5, '#BFC5C9')
   }
+  if (L.hair === 'braid') {
+    // Plait over the shoulder.
+    for (let i = 0; i < 9; i++) p.rect(hx - 10 + Math.round(i * 0.2), hy + 8 + i * 2, 3, 2, i % 2 ? L.hairColor : shade(L.hairColor, 1.8))
+  }
 
   // Head.
-  if (id === 'lina') p.ellipse(hx, hy - 1, 11, 12, '#F28C28')
-  p.ellipse(hx, hy, id === 'lina' ? 8 : 10, id === 'lina' ? 9 : 11, L.skin)
-  if (id !== 'lina') {
+  p.ellipse(hx, hy, covered ? 8 : 10, covered ? 9 : 11, L.skin)
+  if (!covered) {
     p.rect(hx - 11, hy, 2, 4, L.skin)
     p.rect(hx + 10, hy, 2, 4, L.skin)
   }
   p.rect(hx + 5, hy + 3, 3, 6, L.skinDark)
-  if (id === 'ahseng') {
-    p.rect(hx - 10, hy - 4, 3, 6, '#D8D4CC')
-    p.rect(hx + 8, hy - 4, 3, 6, '#D8D4CC')
-    p.px(hx - 3, hy - 10, '#FFE7C8')
-    p.px(hx - 2, hy - 10, '#FFE7C8')
-  }
-  if (id === 'mat') {
-    p.rect(hx - 9, hy - 14, 18, 7, '#1B1416')
-    p.rect(hx - 9, hy - 9, 18, 1, '#3A3036')
-    p.rect(hx - 8, hy - 13, 6, 1, '#4A4046')
-    p.rect(hx - 10, hy - 4, 2, 5, '#2A1A14')
-    p.rect(hx + 8, hy - 4, 2, 5, '#2A1A14')
+
+  // Hair and headwear on top.
+  switch (L.hair) {
+    case 'bald':
+      p.px(hx - 4, hy - 9, shade(L.skin, 1.2))
+      p.px(hx - 3, hy - 9, shade(L.skin, 1.2))
+      break
+    case 'balding':
+      p.rect(hx - 10, hy - 4, 3, 6, L.hairColor)
+      p.rect(hx + 8, hy - 4, 3, 6, L.hairColor)
+      p.px(hx - 3, hy - 10, '#FFE7C8')
+      p.px(hx - 2, hy - 10, '#FFE7C8')
+      break
+    case 'short':
+    case 'wavy':
+    case 'spiky':
+    case 'bun':
+    case 'long':
+    case 'bob':
+    case 'braid':
+    case 'ponytail':
+      cap(hy - 11, hy - 5, L.hairColor)
+      p.rect(hx - 11, hy - 5, 3, 6, L.hairColor)
+      p.rect(hx + 8, hy - 5, 3, 6, L.hairColor)
+      if (L.hair === 'wavy') for (let x = hx - 8; x <= hx + 8; x += 3) p.px(x, hy - 4, L.hairColor)
+      if (L.hair === 'spiky') for (let x = hx - 8; x <= hx + 8; x += 3) p.rect(x, hy - 13, 2, 2, L.hairColor)
+      if (L.hair === 'bun') p.circle(hx, hy - 13, 3.5, L.hairColor)
+      if (L.hair === 'long' || L.hair === 'bob' || L.hair === 'braid') {
+        // Side parting and a soft fringe.
+        p.rect(hx - 7, hy - 5, 6, 2, L.hairColor)
+        p.px(hx + 2, hy - 9, shade(L.hairColor, 1.6))
+      }
+      if (id === 'sweelian') p.rect(hx + 2, hy - 15, 5, 1, C.gold)
+      break
+    case 'songkok':
+      p.rect(hx - 9, hy - 14, 18, 7, L.headwear!)
+      p.rect(hx - 9, hy - 9, 18, 1, '#3A3036')
+      p.rect(hx - 8, hy - 13, 6, 1, '#4A4046')
+      p.rect(hx - 10, hy - 4, 2, 5, L.hairColor)
+      p.rect(hx + 8, hy - 4, 2, 5, L.hairColor)
+      break
+    case 'turban':
+      cap(hy - 15, hy - 4, L.headwear!, 2)
+      for (let k = 0; k < 4; k++) p.line(hx - 9 + k * 3, hy - 4 - k * 2, hx + 3 + k * 2, hy - 12 + k, shade(L.headwear!, 0.7))
+      p.px(hx, hy - 15, shade(L.headwear!, 1.3))
+      break
+    case 'kopiah':
+      p.rect(hx - 8, hy - 14, 16, 5, L.headwear!)
+      for (let x = hx - 7; x < hx + 8; x += 2) p.px(x, hy - 12, '#C9C2B4')
+      break
   }
 
   // Face.
@@ -378,10 +526,14 @@ function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
     } else {
       p.rect(x - 1, ey - 1, 3, 3, C.white)
       const oy = s.eyes === 'up' ? -1 : s.eyes === 'down' ? 1 : 0
-      p.rect(x, ey + oy - (oy < 0 ? 0 : 0), 1, 2, INK)
+      p.rect(x, ey + oy, 1, 2, INK)
     }
   }
-  if (id === 'ahseng') {
+  if (L.lashes && s.eyes !== 'happy') {
+    p.px(ex[0] - 2, ey - 1, INK)
+    p.px(ex[1] + 2, ey - 1, INK)
+  }
+  if (L.glasses) {
     for (const x of ex) p.ring(x, ey, 2.6, 2.4, '#2A2020')
     p.px(hx, ey, '#2A2020')
   }
@@ -401,10 +553,24 @@ function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
   }
   brow(ex[0], -1)
   brow(ex[1], 1)
-  p.px(hx - 7, hy + 5, '#E8908A')
-  p.px(hx + 6, hy + 5, '#E8908A')
+  if (L.bindi) p.px(hx, by2 - 2, C.red)
   const my = hy + 6
-  if (id === 'mat') p.rect(hx - 4, my - 2, 8, 1, '#2A1A14')
+  if (L.beard === 'full') {
+    // Beard hugs the jaw, leaving the mouth clear.
+    for (let y = hy + 3; y <= hy + 12; y++) {
+      const h = Math.round(headHalf(Math.min(y, hy + 10)) + 1)
+      p.rect(hx - h, y, h * 2, 1, L.beardColor!)
+    }
+    p.rect(hx - 3, my - 1, 7, 4, shade(L.skin, 0.9))
+  } else {
+    p.px(hx - 7, hy + 5, '#E8908A')
+    p.px(hx + 6, hy + 5, '#E8908A')
+  }
+  if (L.beard) p.rect(hx - 4, my - 2, 8, 1, L.beardColor!)
+  if (L.earrings && !covered) {
+    p.px(hx - 11, hy + 4, L.earrings)
+    p.px(hx + 11, hy + 4, L.earrings)
+  }
   switch (s.face) {
     case 'smile':
     case 'blink':
@@ -634,7 +800,7 @@ function arrow(): Paint {
   return p
 }
 
-export const SIGNS = ['SATAY', 'AIR TEBU', 'APAM BALIK', 'ROTI JOHN', 'CENDOL', 'MURTABAK']
+export const SIGNS = ['LOK LOK', 'SATAY', 'APAM BALIK', 'ROTI JOHN', 'CENDOL', 'MURTABAK']
 export const STALL_COLORS: [string, string][] = [
   [C.red, C.cream],
   [C.green, C.cream],
@@ -658,7 +824,7 @@ export function buildAtlas(): Atlas {
   a.add('card:back', cardBack(), { bevel: 1, detail: 0.3 })
   a.add('mini:back', miniBack(), { bevel: 1 })
   for (const g of GROUPS) a.add(`mini:${g}`, miniFront(g), { bevel: 1 })
-  for (const id of ['ahseng', 'lina', 'mat'] as const) {
+  for (const id of Object.keys(LOOKS) as Exclude<PersonaId, 'you'>[]) {
     for (const pose of POSES) a.add(`hawker:${id}:${pose}`, hawker(id, pose), { bevel: 4, detail: 0.4 })
   }
   for (let k = 0; k < 4; k++) a.add(`coin:${k}`, coinFrame(k), { bevel: 2 })

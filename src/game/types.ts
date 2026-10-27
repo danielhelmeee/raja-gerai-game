@@ -22,7 +22,23 @@ export interface Shape {
 }
 
 export type Difficulty = 'easy' | 'standard' | 'hard'
-export type PersonaId = 'you' | 'ahseng' | 'lina' | 'mat'
+export type PersonaId =
+  | 'you'
+  | 'ahseng'
+  | 'lina'
+  | 'mat'
+  | 'ayan'
+  | 'pakdan'
+  | 'meiling'
+  | 'anand'
+  | 'kavitha'
+  | 'gurdev'
+  | 'dayang'
+  | 'joanne'
+  | 'robert'
+  | 'ahkow'
+  | 'sweelian'
+  | 'mamakali'
 
 export interface RoundScore {
   cardsLeft: number
@@ -73,7 +89,7 @@ export interface GameState {
   /** Cards from GERAIs that have been beaten or cleared. */
   discard: Card[]
   turn: number
-  /** The match's very first play must include the Karipap 3. */
+  /** Each round's first play must include the Karipap 3. */
   opening: boolean
   round: number
   totalRounds: number
@@ -87,6 +103,8 @@ export interface GameState {
 export interface GameConfig {
   difficulty: Difficulty
   totalRounds: number
+  /** The three AI hawkers at the table, in seat order. */
+  opponents: PersonaId[]
   tutorial?: boolean
 }
 

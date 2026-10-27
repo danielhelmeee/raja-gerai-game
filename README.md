@@ -16,7 +16,7 @@ npm run build
 
 - 52 cards, 13 each. Ranks 3 (low) … 10, J, Q, K, A, 2 (high). Four suits, two colours, one picture each:
   **Karipap** (red) < **Teh Tarik** (black) < **Ramly Burger** (red) < **Nasi Lemak** (black), like ◆ ♣ ♥ ♠.
-- Round one opens with the Karipap 3 holder, who must include it. Later rounds, the last winner leads.
+- Every round opens with the Karipap 3 holder, who must include it in their first play.
 - **JUAL** a single, pair, three of a kind, or a 5-card hand that beats the GERAI (same card count, higher).
   5-card hands, weakest to strongest: **Barisan** (straight, no 2s), **Tapau** (flush), **Kenduri**
   (full house), **Borong** (four of a kind + 1), **Tapau Barisan** (straight flush). The top Tapau Barisan,
@@ -25,6 +25,13 @@ npm run build
   it's cleared and they lead anything.
 - First to empty their hand wins the round. Every other hawker pays **DUIT**: 1 per card left, ×2 with
   10+ cards, ×3 if they never played (13 cards). Most DUIT after the last round is Raja Gerai.
+
+## Hawkers
+
+Each match seats you with three of fifteen AI hawkers (reshuffle them on the setup screen), each with their own
+look and way of talking: Uncle Ah Seng, Kak Lina, Abang Mat, Ayan, Pak Dan, Auntie Mei Ling, Anand,
+Aunty Kavitha, Gurdev Singh, Dayang, Joanne, Uncle Robert, Ah Kow, Nyonya Swee Lian and Mamak Ali.
+The tutorial always uses Uncle Ah Seng, Kak Lina and Abang Mat.
 
 ## Layout
 
