@@ -12,6 +12,12 @@ npm run dev      # http://localhost:5173
 npm run build
 ```
 
+## Play online
+
+Pushing to `main` builds and publishes the game to GitHub Pages through `.github/workflows/deploy.yml`.
+In the repo's **Settings → Pages**, set **Source** to **GitHub Actions**; the game then lives at
+`https://<your-username>.github.io/<repo-name>/`.
+
 ## Rules
 
 - 52 cards, 13 each. Ranks 3 (low) … 10, J, Q, K, A, 2 (high). Four suits, two colours, one picture each:
