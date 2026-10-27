@@ -360,6 +360,11 @@ function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
     }
   }
 
+  // Hair that falls behind the head, neck and body, so it's drawn first.
+  if (L.hair === 'long') p.rrect(hx - 12, hy - 8, 24, by + 10 - (hy - 8), L.hairColor)
+  if (L.hair === 'bob' || L.hair === 'braid') p.rrect(hx - 12, hy - 8, 24, 18, L.hairColor)
+  if (L.hair === 'ponytail') p.rect(hx + 8, hy - 3, 5, 13, L.hairColor)
+
   // Torso and top.
   const shirtDark = shade(L.shirt, 0.8)
   p.rrect(cx - 13, by, 26, 26, L.shirt)
@@ -434,10 +439,6 @@ function hawker(id: Exclude<PersonaId, 'you'>, pose: Pose): Paint {
     for (let i = -5; i <= 5; i++) p.px(cx + i, by + 1 + Math.round((25 - i * i) / 12), L.necklace[(i + 5) % L.necklace.length])
   }
 
-  // Hair that falls behind the head and shoulders.
-  if (L.hair === 'long') p.rrect(hx - 12, hy - 8, 24, by + 10 - (hy - 8), L.hairColor)
-  if (L.hair === 'bob' || L.hair === 'braid') p.rrect(hx - 12, hy - 8, 24, 18, L.hairColor)
-  if (L.hair === 'ponytail') p.rect(hx + 8, hy - 3, 5, 13, L.hairColor)
   if (covered) p.ellipse(hx, hy - 1, 11, 12, L.headwear!)
 
   // Arms, from the shoulders; bare in a singlet.
