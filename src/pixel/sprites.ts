@@ -197,10 +197,12 @@ function cardBack(): Paint {
   p.rect(2, 2, CARD_W - 4, CARD_H - 4, C.indigo)
   for (let y = 3; y < CARD_H - 3; y++) for (let x = 3; x < CARD_W - 3; x++) if ((x + y) % 6 === 0 || (x - y + 60) % 6 === 0) p.px(x, y, C.indigoLight)
   for (let y = 6; y < CARD_H - 4; y += 8) for (let x = (y / 8) % 2 ? 6 : 10; x < CARD_W - 4; x += 8) batikDot(p, x, y)
-  p.ellipse(16, 22, 9, 6, C.cream)
-  p.ring(16, 22, 9, 6, C.yellow)
-  p.text('C', 11, 19, C.maroon)
-  p.text('!', 16, 19, C.maroon)
+  // Raja Gerai badge: "RG" wearing a crown on top of the oval.
+  p.ellipse(16, 23, 9, 6, C.cream)
+  p.ring(16, 23, 9, 6, C.yellow)
+  p.text('RG', 11, 20, C.maroon)
+  p.rect(9, 12, 15, 6, C.indigo)
+  crown(p, 12, 13)
   for (let x = 2; x < CARD_W - 2; x += 3) {
     p.px(x, 1, C.yellow)
     p.px(x, CARD_H - 2, C.yellow)
