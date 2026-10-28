@@ -65,7 +65,8 @@ export class AudioEngine {
   private musicBus!: GainNode
   private sfxBus!: GainNode
   private ambBus!: GainNode
-  private echoIn!: GainNode
+  /** One echo per channel, feeding back into that channel so its mute also silences the tails. */
+  private echoes = new Map<AudioNode, GainNode>()
   private waves = new Map<Voice, PeriodicWave>()
   private white!: AudioBuffer
   private metal!: AudioBuffer
@@ -119,23 +120,27 @@ export class AudioEngine {
     this.ambBus = ctx.createGain()
     for (const b of [this.musicBus, this.sfxBus, this.ambBus]) b.connect(crush)
 
-    // SNES-style echo: a feedback delay with a dark filter in the loop.
-    this.echoIn = ctx.createGain()
-    const delay = ctx.createDelay(1)
-    delay.delayTime.value = 0.27
-    const fb = ctx.createGain()
-    fb.gain.value = 0.38
-    const dark = ctx.createBiquadFilter()
-    dark.type = 'lowpass'
-    dark.frequency.value = 2600
-    const wet = ctx.createGain()
-    wet.gain.value = 0.3
-    this.echoIn.connect(delay)
-    delay.connect(dark)
-    dark.connect(fb)
-    fb.connect(delay)
-    dark.connect(wet)
-    wet.connect(crush)
+    // SNES-style echo: a feedback delay with a dark filter in the loop, one per channel.
+    for (const bus of [this.musicBus, this.sfxBus]) {
+      const input = ctx.createGain()
+      const delay = ctx.createDelay(1)
+      delay.delayTime.value = 0.27
+      const fb = ctx.createGain()
+      fb.gain.value = 0.38
+      const dark = ctx.createBiquadFilter()
+      dark.type = 'lowpass'
+      dark.frequency.value = 2600
+      // The echo now passes through the channel's volume, so lift it to keep the old balance at default levels.
+      const wet = ctx.createGain()
+      wet.gain.value = bus === this.musicBus ? 1.2 : 0.54
+      input.connect(delay)
+      delay.connect(dark)
+      dark.connect(fb)
+      fb.connect(delay)
+      dark.connect(wet)
+      wet.connect(bus)
+      this.echoes.set(bus, input)
+    }
 
     for (const [name, duty] of [
       ['p12', 0.125],
@@ -193,13 +198,18 @@ export class AudioEngine {
     this.tempo = final ? 126 : 108
   }
 
+  private echoFor(bus: AudioNode): GainNode {
+    return this.echoes.get(bus) ?? this.echoes.get(this.sfxBus)!
+  }
+
   private applyMix() {
     if (!this.ctx) return
     const t = this.ctx.currentTime
     this.master.gain.setTargetAtTime(this.mix.master * 0.9, t, 0.05)
     this.musicBus.gain.setTargetAtTime(this.mix.musicOn ? this.mix.music * 0.5 : 0, t, 0.2)
     this.sfxBus.gain.setTargetAtTime(this.mix.sfxOn ? this.mix.sfx * 0.7 : 0, t, 0.05)
-    this.ambBus.gain.setTargetAtTime(this.mix.ambience * 0.5, t, 0.3)
+    // The speaker button silences everything except the music: effects and the market ambience.
+    this.ambBus.gain.setTargetAtTime(this.mix.sfxOn ? this.mix.ambience * 0.5 : 0, t, 0.1)
   }
 
   // ───────────────────────── building blocks ─────────────────────────
@@ -247,7 +257,7 @@ export class AudioEngine {
       const e = ctx.createGain()
       e.gain.value = opts.echo
       g.connect(e)
-      e.connect(this.echoIn)
+      e.connect(this.echoFor(out))
     }
     o.start(t)
     o.stop(t + len + 0.02)
@@ -292,7 +302,7 @@ export class AudioEngine {
       const e = ctx.createGain()
       e.gain.value = opts.echo
       g.connect(e)
-      e.connect(this.echoIn)
+      e.connect(this.echoFor(out))
     }
     src.start(t, Math.random() * 0.5)
     src.stop(t + len + 0.02)
@@ -381,7 +391,7 @@ export class AudioEngine {
         g.gain.exponentialRampToValueAtTime(0.001, t + 3.2)
         car.connect(g)
         g.connect(out)
-        g.connect(this.echoIn)
+        g.connect(this.echoFor(out))
         car.start(t)
         mod.start(t)
         car.stop(t + 3.3)
