@@ -180,7 +180,12 @@ body,
   font-size: max(calc(var(--s) * 8), 16px);
   gap: calc(var(--u) * 3);
   color: var(--kertas);
-  text-shadow: var(--u) var(--u) 0 var(--ink);
+  text-shadow:
+    var(--u) 0 0 var(--ink),
+    calc(var(--u) * -1) 0 0 var(--ink),
+    0 var(--u) 0 var(--ink),
+    0 calc(var(--u) * -1) 0 var(--ink),
+    calc(var(--u) * 2) calc(var(--u) * 2) 0 var(--ink);
   background: none;
   border: none;
   padding: calc(var(--u) * 1.5) 0;

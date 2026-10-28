@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { audio } from '../audio/AudioEngine'
 import { PERSONAS, randomLineup } from '../game/personas'
+import { usePortrait } from '../pixel/PixelStage'
 import type { Difficulty } from '../game/types'
 import { useGame } from '../state/GameContext'
 import { useSettings } from '../state/settings'
@@ -8,6 +9,7 @@ import { AudioToggles, click, Modal, Toggle } from './common'
 
 export function MainMenu() {
   const { setScreen, startTutorial, setOverlay, overlay } = useGame()
+  const portrait = usePortrait()
   const [active, setActive] = useState(0)
   const items: [string, () => void][] = [
     ['Start Game', () => setScreen('setup')],
@@ -39,32 +41,67 @@ export function MainMenu() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  const tagline = (
+    <p className="font-pixel text-[max(calc(var(--s)*5),11px)] uppercase tracking-[0.3em] text-kunyit [text-shadow:var(--u)_var(--u)_0_#1a0f14]">
+      Pasar Malam Showdown
+    </p>
+  )
+  const title = (
+    <h1 className={`neon-title mt-2 ${portrait ? 'text-center' : 'text-left'}`}>
+      RAJA
+      <br />
+      GERAI
+    </h1>
+  )
+  const nav = (
+    <nav className={`flex flex-col ${portrait ? 'items-start' : 'mt-[max(calc(var(--s)*10),20px)]'}`} aria-label="Main menu">
+      {items.map(([label], i) => (
+        <button key={label} className="menu-item" data-active={active === i} onPointerEnter={() => setActive(i)} onClick={() => choose(i)}>
+          <span className="cursor">►</span>
+          {label}
+        </button>
+      ))}
+    </nav>
+  )
+  const hint = (
+    <p className="blink pointer-events-auto font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kertas/70">
+      {portrait ? 'Tap to choose' : '↑ ↓ + Enter or click'}
+    </p>
+  )
+
+  // Phones: the title fills the gap above the card mat and the menu sits on the table below it.
+  if (portrait) {
+    return (
+      <div className="pointer-events-none fixed inset-0 z-20">
+        <div className="pointer-events-auto absolute right-4 top-4">
+          <AudioToggles />
+        </div>
+        <div
+          className="absolute inset-x-0 flex flex-col items-center justify-center"
+          style={{ top: 'calc(var(--table-top) + var(--s) * 26)', height: 'calc(var(--cloth-top) - var(--table-top) - var(--s) * 30)' }}
+        >
+          {tagline}
+          {title}
+        </div>
+        <div className="pointer-events-auto absolute inset-x-0 flex justify-center" style={{ top: 'calc(var(--cloth-bottom) + var(--s) * 8)' }}>
+          {nav}
+        </div>
+        <div className="absolute inset-x-0 bottom-5 flex justify-center">{hint}</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="pointer-events-none fixed inset-0 z-20 flex flex-col items-center justify-between p-4 sm:items-start sm:p-[calc(var(--s)*12)]">
+    <div className="pointer-events-none fixed inset-0 z-20 flex flex-col items-start justify-between p-[calc(var(--s)*12)]">
       <div className="pointer-events-auto self-end">
         <AudioToggles />
       </div>
-      <div className="pointer-events-auto flex flex-col items-center sm:items-start">
-        <p className="font-pixel text-[max(calc(var(--s)*5),11px)] uppercase tracking-[0.3em] text-kunyit [text-shadow:var(--u)_var(--u)_0_#1a0f14]">
-          Pasar Malam Showdown
-        </p>
-        <h1 className="neon-title mt-2 text-center sm:text-left">
-          RAJA
-          <br />
-          GERAI
-        </h1>
-        <nav className="mt-[max(calc(var(--s)*10),20px)] flex flex-col" aria-label="Main menu">
-          {items.map(([label], i) => (
-            <button key={label} className="menu-item" data-active={active === i} onPointerEnter={() => setActive(i)} onClick={() => choose(i)}>
-              <span className="cursor">►</span>
-              {label}
-            </button>
-          ))}
-        </nav>
+      <div className="pointer-events-auto flex flex-col items-start">
+        {tagline}
+        {title}
+        {nav}
       </div>
-      <p className="blink pointer-events-auto font-pixel text-[max(calc(var(--s)*4.5),10px)] uppercase text-kertas/70">
-        ↑ ↓ + Enter or click · Dai Di vs 15 hawkers
-      </p>
+      {hint}
     </div>
   )
 }

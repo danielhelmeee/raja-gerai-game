@@ -48,9 +48,14 @@ export function PixelStage() {
       const root = document.documentElement.style
       root.setProperty('--s', `${cssScale}px`)
       root.setProperty('--action-h', `${layout.actionH * cssScale}px`)
-      root.setProperty('--table-top', `${layout.tableTop * cssScale}px`)
+      // Positions in page px, including the gap above the centred canvas.
+      const top = (window.innerHeight - H * cssScale) / 2
+      root.setProperty('--table-top', `${top + layout.tableTop * cssScale}px`)
+      root.setProperty('--cloth-top', `${top + layout.cloth.y * cssScale}px`)
+      root.setProperty('--cloth-bottom', `${top + (layout.cloth.y + layout.cloth.h) * cssScale}px`)
       root.setProperty('--portrait', layout.portrait ? '1' : '0')
       document.documentElement.dataset.layout = layout.portrait ? 'portrait' : 'landscape'
+      window.dispatchEvent(new Event('layoutchange'))
     }
     fit()
     window.addEventListener('resize', fit)
@@ -91,4 +96,18 @@ export function PixelStage() {
       }}
     />
   )
+}
+
+/** Whether the pixel stage is using its portrait (phone) layout. */
+export function usePortrait() {
+  const read = () => document.documentElement.dataset.layout === 'portrait'
+  const [portrait, setPortrait] = useState(read)
+  useEffect(() => {
+    const on = () => setPortrait(read())
+    window.addEventListener('layoutchange', on)
+    // The stage may have measured itself before this listener existed.
+    on()
+    return () => window.removeEventListener('layoutchange', on)
+  }, [])
+  return portrait
 }
