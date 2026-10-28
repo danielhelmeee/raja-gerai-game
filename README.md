@@ -36,7 +36,7 @@ In the repo's **Settings → Pages**, set **Source** to **GitHub Actions**; the 
 
 Each match seats you with three of fifteen AI hawkers (reshuffle them on the setup screen), each with their own
 look and way of talking: Uncle Ah Seng, Kak Lina, Abang Mat, Ayan, Pak Dan, Auntie Mei Ling, Anand,
-Aunty Kavitha, Gurdev Singh, Dayang, Joanne, Uncle Robert, Ah Kow, Nyonya Swee Lian and Mamak Ali.
+Aunty Kavitha, Gurdev Singh, Dayang, Joanne, Uncle Robert, Ah Kow, Swee Lian and Mamak Ali.
 The tutorial always uses Uncle Ah Seng, Kak Lina and Abang Mat.
 
 ## Layout
