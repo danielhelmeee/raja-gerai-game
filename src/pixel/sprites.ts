@@ -115,12 +115,16 @@ const SUIT_ART: Record<Group, Icon> = {
 /** Top row of each suit picture, so the 2's crown can sit right on it. */
 const ART_TOP: Record<Group, number> = { karipap: 5, tehtarik: 1, ramly: 2, nasilemak: 5 }
 
-/** 5×5 one-colour suit symbols for the card corners. */
+/** Standard poker suit symbols (7×7) for the card corners, so Dai Di players read suits instantly. */
 const PIPS: Record<Group, string[]> = {
-  karipap: ['.....', '.###.', '#####', '#####', '.....'],
-  tehtarik: ['###..', '###.#', '###.#', '####.', '###..'],
-  ramly: ['.###.', '#####', '.....', '#####', '.###.'],
-  nasilemak: ['..#..', '.###.', '.###.', '#####', '#####'],
+  // ♦ Karipap
+  karipap: ['...#...', '..###..', '.#####.', '#######', '.#####.', '..###..', '...#...'],
+  // ♣ Teh Tarik
+  tehtarik: ['..###..', '..###..', '###.###', '#######', '###.###', '...#...', '..###..'],
+  // ♥ Ramly Burger
+  ramly: ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...', '.......'],
+  // ♠ Nasi Lemak
+  nasilemak: ['...#...', '..###..', '.#####.', '#######', '#######', '...#...', '..###..'],
 }
 
 export function pip(p: Paint, group: Group, x: number, y: number, col = SUIT_INK[group]) {
@@ -172,13 +176,13 @@ function cardFront(card: Card): Paint {
   // Corner index and suit symbol: what you read when cards overlap in hand.
   const label = rankLabel(card.rank)
   p.text(label, label.length > 1 ? 2 : 3, 3, ink, 2)
-  pip(p, card.group, label.length > 1 ? 3 : 4, 19)
-  p.ellipse(19, 28, 10, 9, SUIT_TINT[card.group])
-  if (special) p.ring(19, 28, 10, 9, C.gold)
-  if (card.rank >= 11 && card.rank <= 13) portrait(p, 11, 20, card.rank)
-  else SUIT_ART[card.group](p, 11, 20)
+  pip(p, card.group, 3, 19)
+  p.ellipse(20, 28, 9.5, 9, SUIT_TINT[card.group])
+  if (special) p.ring(20, 28, 9.5, 9, C.gold)
+  if (card.rank >= 11 && card.rank <= 13) portrait(p, 12, 20, card.rank)
+  else SUIT_ART[card.group](p, 12, 20)
   // The 2 wears its crown on top of the food itself.
-  if (card.rank === 15) crown(p, 15, 20 + ART_TOP[card.group] - 4)
+  if (card.rank === 15) crown(p, 16, 20 + ART_TOP[card.group] - 4)
   p.text(label, CARD_W - 3 - textWidth(label), CARD_H - 10, ink)
   return p
 }
@@ -224,7 +228,7 @@ function miniFront(group: Group): Paint {
   p.rrect(0, 0, MINI_W, MINI_H, SUIT_INK[group])
   p.rect(1, 1, MINI_W - 2, MINI_H - 2, C.paper)
   p.circle(6, 8, 4, SUIT_TINT[group])
-  pip(p, group, 4, 6)
+  pip(p, group, 3, 5)
   return p
 }
 

@@ -50,19 +50,19 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     kind: 'info',
     title: 'Card order',
-    text: '3 is the lowest card, then 4 up to 10, J, Q, K, A, and 2 is the highest. On equal numbers the suit decides: Karipap < Teh Tarik < Ramly Burger < Nasi Lemak.',
+    text: '3 is the lowest card, then 4 up to 10, J, Q, K, A, and 2 is the highest. On equal numbers the suit decides, like a normal deck: Karipap ♦ < Teh Tarik ♣ < Ramly Burger ♥ < Nasi Lemak ♠.',
     highlight: [{ kind: 'hand' }],
   },
   {
     kind: 'info',
-    title: 'The Karipap 3 opens',
-    text: 'Whoever holds the Karipap 3 starts, and the first play must include it. That is you!',
+    title: 'The Karipap 3♦ opens',
+    text: 'Whoever holds the Karipap 3♦ (the 3 of diamonds) starts, and the first play must include it. That is you!',
     highlight: [cards(k(3))],
   },
   {
     kind: 'do',
     title: 'Open the Gerai',
-    text: 'Tap the Karipap 3, then press JUAL to put it on the Gerai mat.',
+    text: 'Tap the Karipap 3♦, then press JUAL to put it on the Gerai mat.',
     action: { type: 'jual', cardIds: [k(3)] },
     highlight: [cards(k(3)), { kind: 'button', id: 'jual' }],
   },
@@ -76,7 +76,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     kind: 'do',
     title: 'Say LALU',
-    text: 'Only a higher 2 beats a Ramly Burger 2, and you have none. Press LALU to pass. You can still play later.',
+    text: 'Only a higher 2 beats a Ramly Burger 2♥, and you have none. Press LALU to pass. You can still play later.',
     action: { type: 'pass' },
     highlight: [{ kind: 'button', id: 'pass' }],
   },
@@ -129,7 +129,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     kind: 'ai',
     title: 'Tapau!',
-    text: 'Uncle passes, then Kak Lina plays a TAPAU: five Nasi Lemak. Any Tapau beats any Barisan.',
+    text: 'Uncle passes, then Kak Lina plays a TAPAU: five Nasi Lemak ♠. Any Tapau beats any Barisan.',
     moves: [pass(1), jual(2, b(3), b(4), b(5), b(7), b(9)), pass(3)],
   },
   {

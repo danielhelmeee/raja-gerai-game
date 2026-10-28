@@ -10,6 +10,9 @@ export const GROUP_LABEL: Record<Group, string> = {
   nasilemak: 'Nasi Lemak',
 }
 
+/** The poker suit each food stands for. */
+export const SUIT_SYMBOL: Record<Group, string> = { karipap: '♦', tehtarik: '♣', ramly: '♥', nasilemak: '♠' }
+
 /** Two card colours, as in a normal deck: red suits and black suits alternate. */
 export const RED_SUITS: Group[] = ['karipap', 'ramly']
 

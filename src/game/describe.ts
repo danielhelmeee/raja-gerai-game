@@ -13,7 +13,7 @@ export function describe(event: GameEvent, players: Player[]): { text: string; t
     case 'deal':
       return { text: `Round ${event.round}: ${s(players, event.starter, 'open')} the first Gerai`, tone: 'round' }
     case 'jual': {
-      const name = shapeName(event.shape, event.cards)
+      const name = shapeName(event.shape)
       const big = event.shape.kind === 'five'
       if (event.beat === null) return { text: `${s(players, event.actor, 'open')} with ${name}${big ? '!' : ''}`, tone: big ? 'big' : 'jual' }
       return { text: `${who(players, event.actor)} JUAL ${name}, beating ${whose(players, event.beat)} Gerai!`, tone: big ? 'big' : 'jual' }

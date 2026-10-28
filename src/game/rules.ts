@@ -1,4 +1,4 @@
-import { cardKey, GROUP_LABEL, GROUPS, OPENING_CARD, rankLabel, sortCards } from './cards'
+import { cardKey, GROUP_LABEL, GROUPS, OPENING_CARD, rankLabel, sortCards, SUIT_SYMBOL } from './cards'
 import type { Card, FiveKind, Gerai, Shape } from './types'
 
 export const FIVE_ORDER: FiveKind[] = ['barisan', 'tapau', 'kenduri', 'borong', 'tapaubarisan']
@@ -63,12 +63,13 @@ export function beats(play: Shape, gerai: Shape): boolean {
   return play.key > gerai.key
 }
 
-const groupOfKey = (key: number) => GROUP_LABEL[GROUPS[key % 4]]
+const groupOfKey = (key: number) => `${GROUP_LABEL[GROUPS[key % 4]]} ${SUIT_SYMBOL[GROUPS[key % 4]]}`
+const symOfKey = (key: number) => SUIT_SYMBOL[GROUPS[key % 4]]
 
-export function shapeName(s: Shape, cards?: Card[]): string {
+export function shapeName(s: Shape): string {
   switch (s.kind) {
     case 'single':
-      return `single ${rankLabel(Math.floor(s.key / 4))} (${groupOfKey(s.key)})`
+      return `single ${rankLabel(Math.floor(s.key / 4))}${symOfKey(s.key)} (${GROUP_LABEL[GROUPS[s.key % 4]]})`
     case 'pair':
       return `pair of ${rankLabel(Math.floor(s.key / 4))}s`
     case 'triple':
@@ -77,9 +78,9 @@ export function shapeName(s: Shape, cards?: Card[]): string {
       const name = FIVE_NAME[s.five!]
       if (s.five === 'kenduri') return `${name} (${rankLabel(s.key)}s full)`
       if (s.five === 'borong') return `${name} (four ${rankLabel(s.key)}s)`
-      if (s.five === 'tapau') return `${name} (${cards?.length ? GROUP_LABEL[cards[0].group] : groupOfKey(s.key)})`
+      if (s.five === 'tapau') return `${name} (${groupOfKey(s.key)})`
       if (s.five === 'tapaubarisan') return `${isRoyal(s) ? 'Hidangan Diraja' : name} (${groupOfKey(s.key)})`
-      return `${name} to ${rankLabel(Math.floor(s.key / 4))}`
+      return `${name} to ${rankLabel(Math.floor(s.key / 4))}${symOfKey(s.key)}`
     }
   }
 }
@@ -105,10 +106,10 @@ export function checkJual(cards: Card[], gerai: Gerai, opening: boolean): JualCh
       reason: cards.length === 4 ? 'Four cards is not a hand: use 1, 2, 3 or 5' : 'Not a valid hand: single, pair, three, or a 5-card hand',
     }
   }
-  if (opening && !cards.some((c) => c.id === OPENING_CARD)) return { ok: false, shape, reason: 'The first play must include the Karipap 3' }
-  if (!gerai.shape) return { ok: true, shape, reason: `Open with ${shapeName(shape, cards)}` }
+  if (opening && !cards.some((c) => c.id === OPENING_CARD)) return { ok: false, shape, reason: 'The first play must include the Karipap 3♦' }
+  if (!gerai.shape) return { ok: true, shape, reason: `Open with ${shapeName(shape)}` }
   if (shape.count !== gerai.shape.count) return { ok: false, shape, reason: `Must be ${gerai.shape.count} card${gerai.shape.count > 1 ? 's' : ''}, like the Gerai` }
-  if (beats(shape, gerai.shape)) return { ok: true, shape, reason: `${capitalise(shapeName(shape, cards))} beats the Gerai` }
+  if (beats(shape, gerai.shape)) return { ok: true, shape, reason: `${capitalise(shapeName(shape))} beats the Gerai` }
   return { ok: false, shape, reason: 'Too low to beat the Gerai' }
 }
 

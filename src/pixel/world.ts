@@ -836,7 +836,7 @@ export class World {
     if (s.status !== 'playing' || !s.gerai.shape) return
     const owner = s.players[s.gerai.ownerId!]
     const who = owner.isHuman ? 'YOURS' : L.portrait ? PERSONAS[owner.persona].short : owner.name
-    const label = `${who}: ${shapeName(s.gerai.shape, s.gerai.cards)}`
+    const label = `${who}: ${shapeName(s.gerai.shape)}`
     const tw = textWidth(label)
     const y = L.cloth.y + L.cloth.h + 4
     const five = s.gerai.shape.kind === 'five'
