@@ -105,6 +105,8 @@ interface CoinFlight {
 }
 
 const MENU_FAN = ['karipap-3', 'tehtarik-11', 'ramly-12', 'nasilemak-13', 'karipap-14', 'tehtarik-15', 'nasilemak-7']
+/** Neon signs with a buzzing, flickering tube. */
+const FLICKER_SIGNS = new Set(['SATAY', 'APAM BALIK', 'ROTI JOHN', 'CENDOL', 'MURTABAK'])
 const SIGN_COLORS = ['#FFB347', '#9CFF8A', '#FFD27A', '#7FD6FF', '#FF7AA8', '#FF7A45']
 const MENU_PLAYERS: Player[] = (['you', ...randomLineup()] as PersonaId[]).map((persona, id) => ({
   id,
@@ -590,7 +592,7 @@ export class World {
       this.spr(this.lit, `stall:${k}`, sx, L.stallY)
       const sign = SIGNS[k]
       const col = SIGN_COLORS[k]
-      const buzz = hash(sign) < 0.35 && Math.sin(this.t * 13 + i) > 0.92 ? 0.25 : 1
+      const buzz = FLICKER_SIGNS.has(sign) && Math.sin(this.t * 13 + i) > 0.92 ? 0.25 : 1
       this.text(this.em, sign, sx + 55 - textWidth(sign) / 2, L.stallY + 25, rgba(col, buzz))
       this.spr(this.em, 'halo:24', sx + 55 - 24, L.stallY + 4, { color: rgba(col, 0.22 * buzz) })
       this.lights.push({ x: sx + 55, y: L.stallY + 32, z: 18, radius: 70, color: rgb(col), intensity: 0.55 * buzz })
